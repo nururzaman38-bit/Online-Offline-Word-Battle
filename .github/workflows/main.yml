@@ -13,24 +13,28 @@ permissions:
   contents: write
 
 concurrency:
-  group: signed-release-${{ github.ref }}
+  group: word-battle-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  signed-apk:
-    name: Test and build PKCS12 owner-signed APK
+  build-signed-apk:
+    name: Build PKCS12 signed APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
+    env:
+      LC_ALL: C
+      LANG: C
 
     steps:
       # =========================================================
       # 1. Checkout repository
       # =========================================================
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       # =========================================================
-      # 2. Set up Java
+      # 2. Set up Java 21
       # =========================================================
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -40,23 +44,27 @@ jobs:
           cache: gradle
 
       # =========================================================
-      # 3. Set up Android SDK
+      # 3. Set up Android SDK 36
       # =========================================================
-      - name: Set up Android SDK tools
+      - name: Set up Android SDK 36
         uses: android-actions/setup-android@v4
         with:
           cmdline-tools-version: 14742923
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
-          packages: ""
+          packages: |
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
 
       # =========================================================
-      # 4. Install Android API 36
+      # 4. Verify Android SDK
       # =========================================================
-      - name: Install Android API 36
+      - name: Verify Android SDK installation
         shell: bash
         run: |
-          set -euo pipefail
+          trap 'echo "::error::SDK verification failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 
@@ -66,99 +74,113 @@ jobs:
           fi
 
           echo "Android SDK root: $SDK_ROOT"
+
+          echo "Java version:"
+          java -version
+
           echo "SDK Manager version:"
           sdkmanager --version
 
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0"
-
           if [[ ! -d "$SDK_ROOT/platforms/android-36" ]]; then
-            echo "::error::Android API 36 was not installed."
+            echo "::error::Android API 36 is missing."
+            sdkmanager --list || true
             exit 1
           fi
 
           if [[ ! -d "$SDK_ROOT/build-tools/36.0.0" ]]; then
-            echo "::error::Android Build Tools 36.0.0 were not installed."
+            echo "::error::Android Build Tools 36.0.0 are missing."
+            sdkmanager --list || true
             exit 1
           fi
 
-          echo "Android API 36 installed successfully."
+          echo "Android SDK 36 is ready."
 
       # =========================================================
-      # 5. Configure project for available API 36
-      # These changes are temporary and are never committed
+      # 5. Configure project temporarily for API 36
+      # Nothing is committed to repository
       # =========================================================
       - name: Configure project for Android API 36
         shell: bash
         run: |
-          set -euo pipefail
+          trap 'echo "::error::API 36 compatibility step failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
           python3 - <<'PY'
           from pathlib import Path
 
-          gradle_file = Path("app/build.gradle.kts")
+          path = Path("app/build.gradle.kts")
 
-          if not gradle_file.is_file():
+          if not path.exists():
               raise SystemExit("app/build.gradle.kts was not found")
 
-          content = gradle_file.read_text(encoding="utf-8")
+          text = path.read_text(encoding="utf-8")
 
-          replacements = {
-              "compileSdk = 37":
-                  "compileSdk = 36",
+          replacements = [
+              (
+                  "compileSdk = 37",
+                  "compileSdk = 36"
+              ),
+              (
+                  "targetSdk = 37",
+                  "targetSdk = 36"
+              ),
+              (
+                  "androidx.compose:compose-bom:2026.08.00",
+                  "androidx.compose:compose-bom:2026.06.01"
+              ),
+              (
+                  "androidx.core:core-ktx:1.19.0",
+                  "androidx.core:core-ktx:1.18.0"
+              ),
+              (
+                  "androidx.lifecycle:lifecycle-runtime-compose:2.11.0",
+                  "androidx.lifecycle:lifecycle-runtime-compose:2.10.0"
+              ),
+              (
+                  "androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0",
+                  "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
+              ),
+          ]
 
-              "targetSdk = 37":
-                  "targetSdk = 36",
+          for old, new in replacements:
+              if old in text:
+                  text = text.replace(old, new)
+                  print(f"Changed: {old} -> {new}")
+              elif new in text:
+                  print(f"Already configured: {new}")
+              else:
+                  print(f"Warning: version was not found: {old}")
 
-              "androidx.compose:compose-bom:2026.08.00":
-                  "androidx.compose:compose-bom:2026.06.01",
-
-              "androidx.core:core-ktx:1.19.0":
-                  "androidx.core:core-ktx:1.18.0",
-
-              "androidx.lifecycle:lifecycle-runtime-compose:2.11.0":
-                  "androidx.lifecycle:lifecycle-runtime-compose:2.10.0",
-
-              "androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0":
-                  "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0",
-          }
-
-          for old, new in replacements.items():
-              if old not in content:
-                  raise SystemExit(
-                      f"Expected Gradle configuration was not found: {old}"
-                  )
-
-              content = content.replace(old, new)
-
-          gradle_file.write_text(content, encoding="utf-8")
-
-          print("Android API 36 compatibility settings applied.")
+          path.write_text(text, encoding="utf-8")
           PY
 
-          echo "Effective build configuration:"
+          echo
+          echo "Effective Android configuration:"
 
           grep -nE \
-            "compileSdk|targetSdk|compose-bom|core-ktx|lifecycle-runtime-compose|lifecycle-viewmodel-compose" \
-            app/build.gradle.kts
+            'compileSdk|targetSdk|compose-bom|core-ktx|lifecycle-runtime-compose|lifecycle-viewmodel-compose' \
+            app/build.gradle.kts || true
 
-          grep -q 'compileSdk = 36' app/build.gradle.kts
-          grep -q 'targetSdk = 36' app/build.gradle.kts
-          grep -q 'lifecycle-runtime-compose:2.10.0' app/build.gradle.kts
-          grep -q 'lifecycle-viewmodel-compose:2.10.0' app/build.gradle.kts
+          if ! grep -q 'compileSdk = 36' app/build.gradle.kts; then
+            echo "::error::compileSdk is not configured as 36."
+            exit 1
+          fi
+
+          if ! grep -q 'targetSdk = 36' app/build.gradle.kts; then
+            echo "::error::targetSdk is not configured as 36."
+            exit 1
+          fi
 
       # =========================================================
-      # 6. Set up Gradle
+      # 6. Set up Gradle cache
       # =========================================================
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       # =========================================================
-      # 7. Validate required secrets
+      # 7. Validate repository secrets
       # =========================================================
-      - name: Validate required GitHub secrets
+      - name: Validate signing secrets
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -166,187 +188,278 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          set -euo pipefail
+          trap 'echo "::error::Secret validation failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
-          MISSING_SECRET=0
+          FAILED=0
 
-          for SECRET_NAME in \
+          for NAME in \
             KEYSTORE_BASE64 \
             STORE_PASSWORD \
             KEY_ALIAS \
             KEY_PASSWORD
           do
-            if [[ -z "${!SECRET_NAME:-}" ]]; then
-              echo "::error::Missing GitHub repository secret: $SECRET_NAME"
-              MISSING_SECRET=1
+            if [[ -z "${!NAME:-}" ]]; then
+              echo "::error::Missing GitHub repository secret: $NAME"
+              FAILED=1
+            else
+              echo "$NAME is configured."
             fi
           done
 
-          if [[ "$MISSING_SECRET" -ne 0 ]]; then
-            echo "::error::Add all required signing secrets."
+          if [[ "$FAILED" -ne 0 ]]; then
             exit 1
           fi
 
-          echo "All required signing secrets are available."
+          echo "All required signing secrets are configured."
 
       # =========================================================
-      # 8. Restore PKCS#12 keystore from encrypted secret
+      # 8. Restore PKCS12 from KEYSTORE_BASE64
       # =========================================================
-      - name: Restore owner PKCS12 keystore
+      - name: Restore PKCS12 keystore
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          set -euo pipefail
+          trap 'echo "::error::PKCS12 restore failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
+
+          python3 - <<'PY'
+          import base64
+          import binascii
+          import os
+          from pathlib import Path
+
+          encoded = os.environ.get("KEYSTORE_BASE64", "")
+          encoded = "".join(encoded.split())
+
+          if not encoded:
+              raise SystemExit("KEYSTORE_BASE64 is empty")
+
+          try:
+              decoded = base64.b64decode(
+                  encoded,
+                  validate=True
+              )
+          except binascii.Error as error:
+              raise SystemExit(
+                  f"KEYSTORE_BASE64 is invalid: {error}"
+              )
+
+          if len(decoded) < 100:
+              raise SystemExit(
+                  f"Decoded file is too small: {len(decoded)} bytes"
+              )
+
+          output = (
+              Path(os.environ["GITHUB_WORKSPACE"])
+              / "wordbattle-release.p12"
+          )
+
+          output.write_bytes(decoded)
+
+          print(f"Restored PKCS12: {output}")
+          print(f"Decoded size: {len(decoded)} bytes")
+          PY
 
           KEYSTORE_PATH="$GITHUB_WORKSPACE/wordbattle-release.p12"
-
-          printf '%s' "$KEYSTORE_BASE64" \
-            | tr -d '\r\n ' \
-            | base64 --decode \
-            > "$KEYSTORE_PATH"
 
           chmod 600 "$KEYSTORE_PATH"
 
           if [[ ! -s "$KEYSTORE_PATH" ]]; then
-            echo "::error::Decoded PKCS12 keystore is empty."
+            echo "::error::Decoded PKCS12 file is empty."
             exit 1
           fi
 
           echo "WORD_BATTLE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
-          echo "PKCS12 keystore restored successfully."
-          echo "Keystore size: $(wc -c < "$KEYSTORE_PATH") bytes"
+          echo "PKCS12 file restored successfully:"
+          ls -lh "$KEYSTORE_PATH"
 
       # =========================================================
-      # 9. Validate PKCS#12 keystore, password and alias
+      # 9. Diagnose and validate PKCS12
+      # Shows real keytool error instead of hiding it
       # =========================================================
-      - name: Validate PKCS12 keystore and alias
+      - name: Diagnose and validate PKCS12 keystore
         shell: bash
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          set -euo pipefail
+          set -u
 
-          if [[ ! -s "$WORD_BATTLE_KEYSTORE_PATH" ]]; then
-            echo "::error::PKCS12 keystore is unavailable."
+          KEYSTORE="$WORD_BATTLE_KEYSTORE_PATH"
+          STORE_LOG="pkcs12-store-information.txt"
+          PRIVATE_ALIASES="private-key-aliases.txt"
+
+          echo "============================================================"
+          echo "PKCS12 KEYSTORE DIAGNOSTICS"
+          echo "============================================================"
+          echo "Keystore path: $KEYSTORE"
+
+          if [[ ! -f "$KEYSTORE" ]]; then
+            echo "::error::Keystore file does not exist: $KEYSTORE"
             exit 1
           fi
+
+          if [[ ! -s "$KEYSTORE" ]]; then
+            echo "::error::Keystore file is empty."
+            exit 1
+          fi
+
+          echo
+          echo "File information:"
+          ls -lh "$KEYSTORE"
+          file "$KEYSTORE" || true
+
+          echo
+          echo "Keystore file SHA-256 checksum:"
+          sha256sum "$KEYSTORE" || true
+
+          echo
+          echo "Testing PKCS12 format and STORE_PASSWORD..."
+
+          set +e
 
           keytool -list \
             -v \
             -storetype PKCS12 \
-            -keystore "$WORD_BATTLE_KEYSTORE_PATH" \
+            -keystore "$KEYSTORE" \
             -storepass "$STORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
-            > keystore-information.txt
+            > "$STORE_LOG" 2>&1
 
-          echo "PKCS12 keystore password and alias are valid."
+          STORE_STATUS=$?
 
-      # =========================================================
-      # 10. Extract owner keystore fingerprints before build
-      # =========================================================
-      - name: Read PKCS12 certificate fingerprints
-        shell: bash
-        env:
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          set -euo pipefail
+          set -e
+
+          echo
+          echo "================ KEYTOOL OUTPUT ================"
+          cat "$STORE_LOG"
+          echo "============== END KEYTOOL OUTPUT =============="
+
+          if [[ "$STORE_STATUS" -ne 0 ]]; then
+            echo
+            echo "::error::Unable to open the PKCS12 keystore."
+            echo "::error::Possible reasons:"
+            echo "::error::1. STORE_PASSWORD is incorrect."
+            echo "::error::2. KEYSTORE_BASE64 is incomplete."
+            echo "::error::3. The uploaded file is not a real PKCS12 keystore."
+            exit 1
+          fi
+
+          echo
+          echo "PKCS12 format and STORE_PASSWORD are valid."
+
+          awk -F': ' '
+            /^Alias name: / {
+              current_alias=$2
+            }
+
+            /^Entry type: PrivateKeyEntry/ {
+              if (current_alias != "") {
+                print current_alias
+              }
+            }
+          ' "$STORE_LOG" > "$PRIVATE_ALIASES"
+
+          echo
+          echo "Private-key aliases found:"
+
+          if [[ ! -s "$PRIVATE_ALIASES" ]]; then
+            echo "No PrivateKeyEntry alias was found."
+            echo "::error::This PKCS12 file has no signing private key."
+            exit 1
+          fi
+
+          cat "$PRIVATE_ALIASES"
+
+          echo
+          echo "Checking configured KEY_ALIAS..."
+
+          if ! grep -Fxq "$KEY_ALIAS" "$PRIVATE_ALIASES"; then
+            echo "::error::KEY_ALIAS does not match any PrivateKeyEntry."
+            echo
+            echo "Available aliases:"
+            cat "$PRIVATE_ALIASES"
+            echo
+            echo "Update the GitHub KEY_ALIAS secret with one of the exact aliases above."
+            exit 1
+          fi
+
+          echo "Configured KEY_ALIAS matches a PrivateKeyEntry."
+
+          echo
+          echo "Running final alias validation..."
+
+          set +e
 
           keytool -list \
             -v \
             -storetype PKCS12 \
-            -keystore "$WORD_BATTLE_KEYSTORE_PATH" \
+            -keystore "$KEYSTORE" \
             -storepass "$STORE_PASSWORD" \
             -alias "$KEY_ALIAS" \
-            | tee owner-keystore-certificate.txt
+            > selected-alias-information.txt 2>&1
 
-          KEYSTORE_SHA1="$(
-            grep -m 1 'SHA1:' owner-keystore-certificate.txt \
-              | sed 's/.*SHA1:[[:space:]]*//' \
-              | tr -d '\r'
-          )"
+          ALIAS_STATUS=$?
 
-          KEYSTORE_SHA256="$(
-            grep -m 1 'SHA256:' owner-keystore-certificate.txt \
-              | sed 's/.*SHA256:[[:space:]]*//' \
-              | tr -d '\r'
-          )"
+          set -e
 
-          if [[ -z "$KEYSTORE_SHA1" ]]; then
-            echo "::error::Unable to read keystore SHA-1."
+          cat selected-alias-information.txt
+
+          if [[ "$ALIAS_STATUS" -ne 0 ]]; then
+            echo "::error::Final alias validation failed."
             exit 1
           fi
 
-          if [[ -z "$KEYSTORE_SHA256" ]]; then
-            echo "::error::Unable to read keystore SHA-256."
-            exit 1
-          fi
+          cp "$STORE_LOG" keystore-information.txt
 
-          {
-            echo "OWNER PKCS12 KEYSTORE FINGERPRINTS"
-            echo "================================"
-            echo
-            echo "SHA-1:"
-            echo "$KEYSTORE_SHA1"
-            echo
-            echo "SHA-256:"
-            echo "$KEYSTORE_SHA256"
-          } | tee owner-keystore-fingerprints.txt
-
-          echo "Owner keystore SHA-1   : $KEYSTORE_SHA1"
-          echo "Owner keystore SHA-256 : $KEYSTORE_SHA256"
+          echo
+          echo "============================================================"
+          echo "PKCS12 VALIDATION SUCCESSFUL"
+          echo "============================================================"
 
       # =========================================================
-      # 11. Verify ENABLE1 dictionary
+      # 10. Verify ENABLE1 dictionary
       # =========================================================
-      - name: Verify bundled ENABLE dictionary
+      - name: Verify ENABLE1 dictionary
         shell: bash
         run: |
-          set -euo pipefail
+          trap 'echo "::error::Dictionary verification failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
-          DICTIONARY_PATH="app/src/main/assets/dictionary/enable1.txt"
+          FILE="app/src/main/assets/dictionary/enable1.txt"
 
-          if [[ ! -s "$DICTIONARY_PATH" ]]; then
-            echo "::error::ENABLE1 dictionary is missing or empty."
+          if [[ ! -s "$FILE" ]]; then
+            echo "::error::ENABLE1 dictionary is missing."
             exit 1
           fi
 
-          WORD_COUNT="$(wc -l < "$DICTIONARY_PATH")"
+          COUNT="$(wc -l < "$FILE")"
 
-          echo "ENABLE1 word count: $WORD_COUNT"
+          echo "ENABLE1 word count: $COUNT"
 
-          if [[ "$WORD_COUNT" -lt 170000 ]]; then
+          if [[ "$COUNT" -lt 170000 ]]; then
             echo "::error::ENABLE1 dictionary is incomplete."
             exit 1
           fi
 
       # =========================================================
-      # 12. Make Gradle executable
+      # 11. Verify Gradle wrapper
       # =========================================================
-      - name: Make Gradle wrapper executable
-        shell: bash
-        run: chmod +x ./gradlew
-
-      # =========================================================
-      # 13. Run unit tests
-      # =========================================================
-      - name: Run unit tests
+      - name: Verify Gradle wrapper
         shell: bash
         run: |
-          set -euo pipefail
+          trap 'echo "::error::Gradle wrapper failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
-          ./gradlew \
-            --no-daemon \
-            testDebugUnitTest \
-            --stacktrace
+          chmod +x ./gradlew
+          ./gradlew --version
 
       # =========================================================
-      # 14. Build owner-signed release APK
+      # 12. Run tests and build signed release
       # =========================================================
-      - name: Build PKCS12 owner-signed release APK
+      - name: Test and build signed APK
         shell: bash
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
@@ -354,12 +467,22 @@ jobs:
           WORD_BATTLE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           WORD_BATTLE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          set -euo pipefail
+          trap 'echo "::error::Gradle build failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
           if [[ ! -s "$WORD_BATTLE_KEYSTORE_PATH" ]]; then
-            echo "::error::Owner PKCS12 keystore is unavailable."
+            echo "::error::PKCS12 keystore is unavailable."
             exit 1
           fi
+
+          echo "Running unit tests..."
+
+          ./gradlew \
+            --no-daemon \
+            testDebugUnitTest \
+            --stacktrace
+
+          echo "Building release APK..."
 
           ./gradlew \
             --no-daemon \
@@ -367,150 +490,215 @@ jobs:
             --stacktrace
 
       # =========================================================
-      # 15. Verify final APK and extract SHA-1/SHA-256
+      # 13. Locate final APK and apksigner
       # =========================================================
-      - name: Verify APK and generate signing fingerprints
-        id: signing_fingerprints
+      - name: Locate release APK
         shell: bash
         run: |
-          set -euo pipefail
+          trap 'echo "::error::APK discovery failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
-          APK_PATH="app/build/outputs/apk/release/app-release.apk"
-          APKSIGNER="$SDK_ROOT/build-tools/36.0.0/apksigner"
 
-          if [[ ! -s "$APK_PATH" ]]; then
-            echo "::error::Release APK was not generated: $APK_PATH"
+          APK_PATH="$(
+            find app/build/outputs/apk/release \
+              -maxdepth 1 \
+              -type f \
+              -name '*.apk' \
+              | head -n 1
+          )"
+
+          APKSIGNER="$(
+            find "$SDK_ROOT/build-tools" \
+              -type f \
+              -name apksigner \
+              | sort -V \
+              | tail -n 1
+          )"
+
+          if [[ -z "$APK_PATH" || ! -s "$APK_PATH" ]]; then
+            echo "::error::Release APK was not found."
+            find app/build/outputs -type f 2>/dev/null || true
             exit 1
           fi
 
-          if [[ ! -x "$APKSIGNER" ]]; then
-            echo "::error::apksigner was not found: $APKSIGNER"
+          if [[ -z "$APKSIGNER" || ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner was not found."
+            find "$SDK_ROOT/build-tools" -name apksigner 2>/dev/null || true
             exit 1
           fi
 
-          "$APKSIGNER" verify \
+          echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
+          echo "APKSIGNER_PATH=$APKSIGNER" >> "$GITHUB_ENV"
+
+          echo "Release APK: $APK_PATH"
+          echo "APK signer: $APKSIGNER"
+          ls -lh "$APK_PATH"
+
+      # =========================================================
+      # 14. Verify final APK signature
+      # =========================================================
+      - name: Verify final APK signature
+        shell: bash
+        run: |
+          trap 'echo "::error::APK signature verification failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
+
+          "$APKSIGNER_PATH" verify \
             --verbose \
             --print-certs \
             "$APK_PATH" \
-            | tee signing-certificate.txt
-
-          SHA1_RAW="$(
-            sed -n \
-              's/^Signer #1 certificate SHA-1 digest: //p' \
-              signing-certificate.txt \
-              | head -n 1 \
-              | tr -d '\r'
-          )"
-
-          SHA256_RAW="$(
-            sed -n \
-              's/^Signer #1 certificate SHA-256 digest: //p' \
-              signing-certificate.txt \
-              | head -n 1 \
-              | tr -d '\r'
-          )"
-
-          if [[ -z "$SHA1_RAW" ]]; then
-            echo "::error::Unable to extract APK SHA-1 fingerprint."
-            exit 1
-          fi
-
-          if [[ -z "$SHA256_RAW" ]]; then
-            echo "::error::Unable to extract APK SHA-256 fingerprint."
-            exit 1
-          fi
-
-          SHA1_FINGERPRINT="$(
-            echo "$SHA1_RAW" \
-              | tr '[:lower:]' '[:upper:]' \
-              | sed 's/../&:/g; s/:$//'
-          )"
-
-          SHA256_FINGERPRINT="$(
-            echo "$SHA256_RAW" \
-              | tr '[:lower:]' '[:upper:]' \
-              | sed 's/../&:/g; s/:$//'
-          )"
-
-          {
-            echo "WORD BATTLE FINAL APK FINGERPRINTS"
-            echo "=================================="
-            echo
-            echo "Package: com.wordbattle.com"
-            echo
-            echo "Keystore type: PKCS12"
-            echo
-            echo "SHA-1:"
-            echo "$SHA1_FINGERPRINT"
-            echo
-            echo "SHA-256:"
-            echo "$SHA256_FINGERPRINT"
-          } | tee signing-fingerprints.txt
-
-          echo
-          echo "============================================================"
-          echo "FINAL SIGNED APK FINGERPRINTS"
-          echo "============================================================"
-          echo "Package  : com.wordbattle.com"
-          echo "SHA-1    : $SHA1_FINGERPRINT"
-          echo "SHA-256  : $SHA256_FINGERPRINT"
-          echo "============================================================"
-
-          echo "sha1=$SHA1_FINGERPRINT" >> "$GITHUB_OUTPUT"
-          echo "sha256=$SHA256_FINGERPRINT" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "## 🔐 Final APK Signing Certificate"
-            echo
-            echo "| Type | Fingerprint |"
-            echo "|---|---|"
-            echo "| **SHA-1** | \`$SHA1_FINGERPRINT\` |"
-            echo "| **SHA-256** | \`$SHA256_FINGERPRINT\` |"
-            echo
-            echo "**Package:** \`com.wordbattle.com\`"
-            echo
-            echo "**Keystore:** PKCS#12"
-          } >> "$GITHUB_STEP_SUMMARY"
+            | tee apk-certificate.txt
 
       # =========================================================
-      # 16. Prepare APK artifact
+      # 15. Generate Google-format SHA-1 and SHA-256
+      # =========================================================
+      - name: Generate certificate fingerprints
+        id: fingerprints
+        shell: bash
+        run: |
+          trap 'echo "::error::Fingerprint generation failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
+
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          apk_text = Path("apk-certificate.txt").read_text(
+              encoding="utf-8",
+              errors="replace"
+          )
+
+          keytool_text = Path("keystore-information.txt").read_text(
+              encoding="utf-8",
+              errors="replace"
+          )
+
+          sha1_match = re.search(
+              r"certificate SHA-1 digest:\s*([0-9a-fA-F:]+)",
+              apk_text,
+              re.IGNORECASE
+          )
+
+          sha256_match = re.search(
+              r"certificate SHA-256 digest:\s*([0-9a-fA-F:]+)",
+              apk_text,
+              re.IGNORECASE
+          )
+
+          if not sha1_match:
+              sha1_match = re.search(
+                  r"SHA1:\s*([0-9a-fA-F:]+)",
+                  keytool_text,
+                  re.IGNORECASE
+              )
+
+          if not sha256_match:
+              sha256_match = re.search(
+                  r"SHA256:\s*([0-9a-fA-F:]+)",
+                  keytool_text,
+                  re.IGNORECASE
+              )
+
+          if not sha1_match:
+              raise SystemExit("SHA-1 fingerprint was not found")
+
+          if not sha256_match:
+              raise SystemExit("SHA-256 fingerprint was not found")
+
+          def google_format(value):
+              clean = re.sub(
+                  r"[^0-9a-fA-F]",
+                  "",
+                  value
+              ).upper()
+
+              return ":".join(
+                  clean[index:index + 2]
+                  for index in range(0, len(clean), 2)
+              )
+
+          sha1 = google_format(sha1_match.group(1))
+          sha256 = google_format(sha256_match.group(1))
+
+          content = f"""WORD BATTLE SIGNING CERTIFICATE
+          =================================
+
+          Package name: com.wordbattle.com
+          Keystore type: PKCS12
+
+          SHA-1:
+          {sha1}
+
+          SHA-256:
+          {sha256}
+          """
+
+          Path("signing-fingerprints.txt").write_text(
+              content,
+              encoding="utf-8"
+          )
+
+          print("=" * 60)
+          print("FINAL APK SIGNING FINGERPRINTS")
+          print("=" * 60)
+          print("Package  : com.wordbattle.com")
+          print(f"SHA-1    : {sha1}")
+          print(f"SHA-256  : {sha256}")
+          print("=" * 60)
+
+          with open(
+              os.environ["GITHUB_OUTPUT"],
+              "a",
+              encoding="utf-8"
+          ) as output:
+              output.write(f"sha1={sha1}\n")
+              output.write(f"sha256={sha256}\n")
+
+          with open(
+              os.environ["GITHUB_STEP_SUMMARY"],
+              "a",
+              encoding="utf-8"
+          ) as summary:
+              summary.write("## 🔐 APK Signing Certificate\n\n")
+              summary.write("| Type | Fingerprint |\n")
+              summary.write("|---|---|\n")
+              summary.write(f"| **SHA-1** | `{sha1}` |\n")
+              summary.write(f"| **SHA-256** | `{sha256}` |\n\n")
+              summary.write("**Package:** `com.wordbattle.com`\n\n")
+              summary.write("**Keystore:** PKCS#12\n")
+          PY
+
+          cat signing-fingerprints.txt
+
+      # =========================================================
+      # 16. Prepare downloadable artifact
       # =========================================================
       - name: Prepare signed APK artifact
         shell: bash
         run: |
-          set -euo pipefail
-
-          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          trap 'echo "::error::Artifact preparation failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
           mkdir -p signed-artifact
 
-          OUTPUT_APK="signed-artifact/WordBattle-v1.0.0-build-${GITHUB_RUN_NUMBER}-signed.apk"
+          OUTPUT_APK="signed-artifact/WordBattle-build-${GITHUB_RUN_NUMBER}-signed.apk"
 
           cp "$APK_PATH" "$OUTPUT_APK"
-
-          cp \
-            signing-certificate.txt \
-            signed-artifact/signing-certificate.txt
-
-          cp \
-            signing-fingerprints.txt \
-            signed-artifact/signing-fingerprints.txt
-
-          cp \
-            owner-keystore-fingerprints.txt \
-            signed-artifact/owner-keystore-fingerprints.txt
+          cp apk-certificate.txt signed-artifact/apk-certificate.txt
+          cp signing-fingerprints.txt signed-artifact/signing-fingerprints.txt
 
           sha256sum "$OUTPUT_APK" \
             | tee signed-artifact/SHA256SUMS.txt
 
-          echo "Prepared files:"
-          ls -lh signed-artifact/
+          echo "Artifact files:"
+          ls -lh signed-artifact
 
       # =========================================================
-      # 17. Upload signed artifact
+      # 17. Upload signed APK
       # =========================================================
-      - name: Upload signed APK artifact
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: WordBattle-PKCS12-signed-${{ github.run_number }}
@@ -520,28 +708,27 @@ jobs:
           compression-level: 6
 
       # =========================================================
-      # 18. Attach to GitHub Release for v* tags
+      # 18. Attach to GitHub Release when using v* tag
       # =========================================================
-      - name: Attach signed APK to GitHub Release
+      - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          trap 'echo "::error::GitHub Release failed at line $LINENO: $BASH_COMMAND"' ERR
+          set -Eeuo pipefail
 
-          TAG_NAME="$GITHUB_REF_NAME"
-
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload \
-              "$TAG_NAME" \
+              "$GITHUB_REF_NAME" \
               signed-artifact/* \
               --clobber
           else
             gh release create \
-              "$TAG_NAME" \
+              "$GITHUB_REF_NAME" \
               signed-artifact/* \
-              --title "Word Battle $TAG_NAME" \
+              --title "Word Battle $GITHUB_REF_NAME" \
               --generate-notes
           fi
 

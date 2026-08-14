@@ -20,17 +20,17 @@ jobs:
   signed-apk:
     name: Test and build owner-signed APK
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       # =========================================================
-      # 1. Checkout repository
+      # 1. Checkout source
       # =========================================================
       - name: Checkout source
         uses: actions/checkout@v4
 
       # =========================================================
-      # 2. Set up Java
+      # 2. Set up Java 21
       # =========================================================
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -51,7 +51,7 @@ jobs:
           packages: ""
 
       # =========================================================
-      # 4. Install available stable Android API 36
+      # 4. Install Android API 36
       # =========================================================
       - name: Install Android API 36
         shell: bash
@@ -90,10 +90,11 @@ jobs:
           echo "Android API 36 installed successfully."
 
       # =========================================================
-      # 5. Change API 37 dependencies to API 36 only on runner
-      # Nothing is committed back to repository
+      # 5. Configure dependencies for Android API 36
+      # These changes happen only inside GitHub runner
+      # Nothing is committed to the repository
       # =========================================================
-      - name: Configure project for available Android API 36
+      - name: Configure project for Android API 36
         shell: bash
         run: |
           set -euo pipefail
@@ -101,16 +102,31 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          file_path = Path("app/build.gradle.kts")
-          content = file_path.read_text(encoding="utf-8")
+          gradle_file = Path("app/build.gradle.kts")
+
+          if not gradle_file.is_file():
+              raise SystemExit("app/build.gradle.kts was not found")
+
+          content = gradle_file.read_text(encoding="utf-8")
 
           replacements = {
-              'compileSdk = 37': 'compileSdk = 36',
-              'targetSdk = 37': 'targetSdk = 36',
-              'androidx.compose:compose-bom:2026.08.00':
-                  'androidx.compose:compose-bom:2026.06.01',
-              'androidx.core:core-ktx:1.19.0':
-                  'androidx.core:core-ktx:1.18.0',
+              "compileSdk = 37":
+                  "compileSdk = 36",
+
+              "targetSdk = 37":
+                  "targetSdk = 36",
+
+              "androidx.compose:compose-bom:2026.08.00":
+                  "androidx.compose:compose-bom:2026.06.01",
+
+              "androidx.core:core-ktx:1.19.0":
+                  "androidx.core:core-ktx:1.18.0",
+
+              "androidx.lifecycle:lifecycle-runtime-compose:2.11.0":
+                  "androidx.lifecycle:lifecycle-runtime-compose:2.10.0",
+
+              "androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0":
+                  "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0",
           }
 
           for old, new in replacements.items():
@@ -118,27 +134,45 @@ jobs:
                   raise SystemExit(
                       f"Expected Gradle configuration was not found: {old}"
                   )
+
               content = content.replace(old, new)
 
-          file_path.write_text(content, encoding="utf-8")
+          gradle_file.write_text(content, encoding="utf-8")
+
+          print("Android API 36 compatibility configuration applied.")
           PY
 
-          echo "Effective Android configuration:"
+          echo
+          echo "Effective Android build configuration:"
+          echo "======================================"
+
           grep -nE \
-            "compileSdk|targetSdk|compose-bom|core-ktx" \
+            "compileSdk|targetSdk|compose-bom|core-ktx|lifecycle-runtime-compose|lifecycle-viewmodel-compose" \
             app/build.gradle.kts
 
-          if ! grep -q "compileSdk = 36" app/build.gradle.kts; then
+          echo "======================================"
+
+          if ! grep -q 'compileSdk = 36' app/build.gradle.kts; then
             echo "::error::compileSdk was not changed to API 36."
             exit 1
           fi
 
-          if ! grep -q "targetSdk = 36" app/build.gradle.kts; then
+          if ! grep -q 'targetSdk = 36' app/build.gradle.kts; then
             echo "::error::targetSdk was not changed to API 36."
             exit 1
           fi
 
-          echo "Project configured for API 36 on this runner."
+          if ! grep -q 'lifecycle-runtime-compose:2.10.0' app/build.gradle.kts; then
+            echo "::error::Lifecycle runtime was not changed to 2.10.0."
+            exit 1
+          fi
+
+          if ! grep -q 'lifecycle-viewmodel-compose:2.10.0' app/build.gradle.kts; then
+            echo "::error::Lifecycle ViewModel was not changed to 2.10.0."
+            exit 1
+          fi
+
+          echo "Project successfully configured for Android API 36."
 
       # =========================================================
       # 6. Set up Gradle
@@ -147,7 +181,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       # =========================================================
-      # 7. Validate required signing secrets
+      # 7. Validate GitHub Secrets
       # =========================================================
       - name: Validate required GitHub secrets
         shell: bash
@@ -181,7 +215,7 @@ jobs:
           echo "All required signing secrets are available."
 
       # =========================================================
-      # 8. Restore only the owner's keystore
+      # 8. Restore owner keystore
       # =========================================================
       - name: Restore owner keystore
         shell: bash
@@ -191,6 +225,8 @@ jobs:
           set -euo pipefail
 
           KEYSTORE_PATH="$GITHUB_WORKSPACE/wordbattle-release.jks"
+
+          echo "Restoring owner keystore..."
 
           printf '%s' "$KEYSTORE_BASE64" \
             | tr -d '\r\n ' \
@@ -210,7 +246,7 @@ jobs:
           echo "Keystore size: $(wc -c < "$KEYSTORE_PATH") bytes"
 
       # =========================================================
-      # 9. Verify store password and key alias
+      # 9. Validate keystore password and alias
       # =========================================================
       - name: Validate owner keystore and alias
         shell: bash
@@ -268,7 +304,6 @@ jobs:
 
       # =========================================================
       # 12. Run unit tests
-      # No debug APK is generated
       # =========================================================
       - name: Run unit tests
         shell: bash
@@ -281,7 +316,7 @@ jobs:
             --stacktrace
 
       # =========================================================
-      # 13. Build release APK using only owner keystore
+      # 13. Build release APK with owner's keystore
       # =========================================================
       - name: Build owner-signed release APK
         shell: bash
@@ -304,7 +339,7 @@ jobs:
             --stacktrace
 
       # =========================================================
-      # 14. Verify APK and extract SHA-1 / SHA-256 fingerprints
+      # 14. Verify APK and extract SHA-1 / SHA-256
       # =========================================================
       - name: Verify APK and generate signing fingerprints
         id: signing_fingerprints
@@ -401,7 +436,7 @@ jobs:
           echo "APK signature and fingerprints verified successfully."
 
       # =========================================================
-      # 15. Prepare APK, checksum and fingerprint files
+      # 15. Prepare artifact
       # =========================================================
       - name: Prepare signed APK artifact
         shell: bash
@@ -431,7 +466,7 @@ jobs:
           ls -lh signed-artifact/
 
       # =========================================================
-      # 16. Upload signed APK artifact
+      # 16. Upload artifact
       # =========================================================
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
@@ -443,7 +478,7 @@ jobs:
           compression-level: 6
 
       # =========================================================
-      # 17. Attach APK to GitHub Release for v* tags
+      # 17. Attach to tagged GitHub Release
       # =========================================================
       - name: Attach signed APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')

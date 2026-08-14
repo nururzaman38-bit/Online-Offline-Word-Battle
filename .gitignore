@@ -1,14 +1,231 @@
+# =========================================================
+# Android Studio / IntelliJ
+# =========================================================
 *.iml
-.gradle/
 .idea/
-local.properties
-/build/
-**/build/
+.idea/**/*
+*.ipr
+*.iws
+.navigation/
+captures/
 .externalNativeBuild/
 .cxx/
-captures/
+
+# =========================================================
+# Gradle generated files
+# =========================================================
+.gradle/
+**/.gradle/
+build/
+**/build/
+out/
+**/out/
+
+# Keep the Gradle wrapper files tracked
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradlew
+!gradlew.bat
+
+# =========================================================
+# Local Android SDK configuration
+# =========================================================
+local.properties
+**/local.properties
+
+# =========================================================
+# Kotlin / Java generated files
+# =========================================================
+*.class
+*.dex
+*.hprof
+.kotlin/
+.kotlinc/
+kotlin-js-store/
+
+# =========================================================
+# Native build files
+# =========================================================
+.externalNativeBuild/
+.cxx/
+obj/
+libs/
+
+# =========================================================
+# Android build outputs
+# =========================================================
+*.apk
+*.ap_
+*.aab
+*.aar
+*.mapping
+output-metadata.json
+
+# =========================================================
+# Signing keystores — NEVER COMMIT
+# =========================================================
 *.jks
 *.keystore
-.DS_Store
 *.p12
 *.pfx
+*.pkcs12
+
+# Common keystore filenames
+wordbattle-release.jks
+wordbattle-release.keystore
+wordbattle-release.p12
+release.jks
+release.keystore
+release.p12
+upload.jks
+upload.keystore
+upload-key.jks
+upload-key.keystore
+
+# =========================================================
+# Keystore Base64 and signing configuration — NEVER COMMIT
+# =========================================================
+KEYSTORE_BASE64
+KEYSTORE_BASE64.txt
+KEYSTORE_BASE64.*
+keystore-base64.txt
+keystore_base64.txt
+
+keystore.properties
+signing.properties
+key.properties
+release-signing.properties
+upload-signing.properties
+
+# =========================================================
+# Private certificates and keys
+# =========================================================
+*.pem
+*.key
+*.cer
+*.crt
+*.der
+*.p7b
+*.p7c
+*.p8
+
+# =========================================================
+# GitHub Actions generated signing reports/artifacts
+# =========================================================
+signed-artifact/
+**/signed-artifact/
+
+apk-certificate.txt
+signing-certificate.txt
+signing-fingerprints.txt
+owner-keystore-certificate.txt
+owner-keystore-fingerprints.txt
+keystore-information.txt
+pkcs12-store-information.txt
+selected-alias-information.txt
+private-key-aliases.txt
+SHA256SUMS.txt
+
+# =========================================================
+# Environment and secret files
+# =========================================================
+.env
+.env.*
+*.env
+secrets.properties
+credentials.properties
+service-account.json
+service-account-key.json
+google-service-account.json
+
+# Allow safe environment examples
+!.env.example
+!*.env.example
+
+# =========================================================
+# Firebase / Google local service configuration
+# Uncomment google-services.json if you intentionally need
+# to track it. This project currently uses Google OAuth
+# through GOOGLE_WEB_CLIENT_ID.
+# =========================================================
+google-services.json
+app/google-services.json
+
+# =========================================================
+# Supabase local development files
+# Keep supabase/schema.sql tracked
+# =========================================================
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/.env.*
+supabase/config.local.toml
+
+# =========================================================
+# Logs
+# =========================================================
+*.log
+logs/
+**/logs/
+
+# =========================================================
+# Operating system files
+# =========================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+ehthumbs.db
+
+# =========================================================
+# Temporary/editor files
+# =========================================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.backup
+*.orig
+*.rej
+
+# =========================================================
+# Test and coverage outputs
+# =========================================================
+coverage/
+**/coverage/
+test-results/
+**/test-results/
+reports/
+**/reports/
+
+# =========================================================
+# Fastlane generated files
+# =========================================================
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/readme.md
+
+# =========================================================
+# Distribution folders
+# =========================================================
+dist/
+**/dist/
+release/
+releases/
+
+# =========================================================
+# Do NOT ignore required project files
+# =========================================================
+!app/src/main/assets/dictionary/enable1.txt
+!supabase/schema.sql
+!supabase/update_username_cooldown.sql
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+!.github/workflows/*.yamlyaml

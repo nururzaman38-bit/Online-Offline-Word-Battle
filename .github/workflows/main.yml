@@ -1,0 +1,435 @@
+name: Build signed release APK
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+      - arena/019ffe69-online-offline-word-battle
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signed-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-apk:
+    name: Test and build owner-signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      # =========================================================
+      # 1. Checkout repository
+      # =========================================================
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # =========================================================
+      # 2. Set up Java
+      # =========================================================
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # =========================================================
+      # 3. Set up latest Android SDK command-line tools
+      # =========================================================
+      - name: Set up latest Android SDK tools
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: 14742923
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+          packages: ""
+
+      # =========================================================
+      # 4. Install Android 17 / API 37
+      # =========================================================
+      - name: Install Android API 37
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+
+          if [[ -z "$SDK_ROOT" ]]; then
+            echo "::error::ANDROID_SDK_ROOT and ANDROID_HOME are not set."
+            exit 1
+          fi
+
+          echo "Android SDK root: $SDK_ROOT"
+
+          echo "SDK Manager version:"
+          sdkmanager --version
+
+          echo "Installing Android 17 / API 37..."
+
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-37" \
+            "build-tools;37.0.0" \
+            --channel=3
+
+          echo "Checking installed Android SDK packages..."
+
+          if [[ ! -d "$SDK_ROOT/platforms/android-37" ]]; then
+            echo "::error::Android API 37 was not installed."
+            exit 1
+          fi
+
+          if [[ ! -d "$SDK_ROOT/build-tools/37.0.0" ]]; then
+            echo "::error::Android Build Tools 37.0.0 were not installed."
+            exit 1
+          fi
+
+          echo "Android API 37 installation completed successfully."
+
+      # =========================================================
+      # 5. Set up Gradle
+      # =========================================================
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # =========================================================
+      # 6. Check required GitHub Secrets
+      # =========================================================
+      - name: Validate required GitHub secrets
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          MISSING_SECRET=0
+
+          for SECRET_NAME in \
+            KEYSTORE_BASE64 \
+            STORE_PASSWORD \
+            KEY_ALIAS \
+            KEY_PASSWORD
+          do
+            if [[ -z "${!SECRET_NAME:-}" ]]; then
+              echo "::error::Missing GitHub repository secret: $SECRET_NAME"
+              MISSING_SECRET=1
+            fi
+          done
+
+          if [[ "$MISSING_SECRET" -ne 0 ]]; then
+            echo "::error::Add all required repository secrets before running this workflow."
+            exit 1
+          fi
+
+          echo "All required signing secrets are available."
+
+      # =========================================================
+      # 7. Restore only the owner's keystore
+      # =========================================================
+      - name: Restore owner keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/wordbattle-release.jks"
+
+          echo "Restoring owner keystore..."
+
+          printf '%s' "$KEYSTORE_BASE64" \
+            | tr -d '\r\n ' \
+            | base64 --decode \
+            > "$KEYSTORE_PATH"
+
+          chmod 600 "$KEYSTORE_PATH"
+
+          if [[ ! -s "$KEYSTORE_PATH" ]]; then
+            echo "::error::Decoded keystore file is empty."
+            exit 1
+          fi
+
+          echo "WORD_BATTLE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+          echo "Owner keystore restored successfully."
+          echo "Keystore size: $(wc -c < "$KEYSTORE_PATH") bytes"
+
+      # =========================================================
+      # 8. Verify store password and alias
+      # =========================================================
+      - name: Validate owner keystore and alias
+        shell: bash
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! -s "$WORD_BATTLE_KEYSTORE_PATH" ]]; then
+            echo "::error::Owner keystore was not restored."
+            exit 1
+          fi
+
+          keytool -list \
+            -keystore "$WORD_BATTLE_KEYSTORE_PATH" \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            >/dev/null
+
+          echo "Keystore password and key alias are valid."
+
+      # =========================================================
+      # 9. Verify ENABLE1 dictionary
+      # =========================================================
+      - name: Verify bundled ENABLE dictionary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DICTIONARY_PATH="app/src/main/assets/dictionary/enable1.txt"
+
+          if [[ ! -s "$DICTIONARY_PATH" ]]; then
+            echo "::error::ENABLE1 dictionary is missing or empty."
+            exit 1
+          fi
+
+          WORD_COUNT="$(wc -l < "$DICTIONARY_PATH")"
+
+          echo "ENABLE1 word count: $WORD_COUNT"
+
+          if [[ "$WORD_COUNT" -lt 170000 ]]; then
+            echo "::error::ENABLE1 dictionary does not contain the expected number of words."
+            exit 1
+          fi
+
+          echo "ENABLE1 dictionary verified successfully."
+
+      # =========================================================
+      # 10. Make Gradle wrapper executable
+      # =========================================================
+      - name: Make Gradle wrapper executable
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+
+      # =========================================================
+      # 11. Run unit tests
+      # No debug APK is produced
+      # =========================================================
+      - name: Run unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ./gradlew \
+            --no-daemon \
+            testDebugUnitTest \
+            --stacktrace
+
+      # =========================================================
+      # 12. Build release APK using only the owner's keystore
+      # =========================================================
+      - name: Build owner-signed release APK
+        shell: bash
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          WORD_BATTLE_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          WORD_BATTLE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          WORD_BATTLE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! -s "$WORD_BATTLE_KEYSTORE_PATH" ]]; then
+            echo "::error::Owner keystore is unavailable."
+            exit 1
+          fi
+
+          ./gradlew \
+            --no-daemon \
+            assembleRelease \
+            --stacktrace
+
+      # =========================================================
+      # 13. Verify final APK and extract SHA-1 / SHA-256
+      # =========================================================
+      - name: Verify APK and generate signing fingerprints
+        id: signing_fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          APKSIGNER="$SDK_ROOT/build-tools/37.0.0/apksigner"
+
+          if [[ ! -s "$APK_PATH" ]]; then
+            echo "::error::Release APK was not generated: $APK_PATH"
+            exit 1
+          fi
+
+          if [[ ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner was not found: $APKSIGNER"
+            exit 1
+          fi
+
+          echo "Verifying signed release APK..."
+
+          "$APKSIGNER" verify \
+            --verbose \
+            --print-certs \
+            "$APK_PATH" \
+            | tee signing-certificate.txt
+
+          SHA1_FINGERPRINT="$(
+            sed -n \
+              's/^Signer #1 certificate SHA-1 digest: //p' \
+              signing-certificate.txt \
+              | head -n 1 \
+              | tr -d '\r'
+          )"
+
+          SHA256_FINGERPRINT="$(
+            sed -n \
+              's/^Signer #1 certificate SHA-256 digest: //p' \
+              signing-certificate.txt \
+              | head -n 1 \
+              | tr -d '\r'
+          )"
+
+          if [[ -z "$SHA1_FINGERPRINT" ]]; then
+            echo "::error::Unable to extract SHA-1 fingerprint from the signed APK."
+            exit 1
+          fi
+
+          if [[ -z "$SHA256_FINGERPRINT" ]]; then
+            echo "::error::Unable to extract SHA-256 fingerprint from the signed APK."
+            exit 1
+          fi
+
+          {
+            echo "WORD BATTLE APK SIGNING FINGERPRINTS"
+            echo "===================================="
+            echo
+            echo "Package name: com.wordbattle.com"
+            echo
+            echo "SHA-1:"
+            echo "$SHA1_FINGERPRINT"
+            echo
+            echo "SHA-256:"
+            echo "$SHA256_FINGERPRINT"
+          } | tee signing-fingerprints.txt
+
+          echo
+          echo "============================================================"
+          echo "FINAL SIGNED APK CERTIFICATE FINGERPRINTS"
+          echo "============================================================"
+          echo "Package  : com.wordbattle.com"
+          echo "SHA-1    : $SHA1_FINGERPRINT"
+          echo "SHA-256  : $SHA256_FINGERPRINT"
+          echo "============================================================"
+
+          echo "sha1=$SHA1_FINGERPRINT" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256_FINGERPRINT" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 🔐 APK Signing Certificate Fingerprints"
+            echo
+            echo "| Type | Fingerprint |"
+            echo "|---|---|"
+            echo "| **SHA-1** | \`$SHA1_FINGERPRINT\` |"
+            echo "| **SHA-256** | \`$SHA256_FINGERPRINT\` |"
+            echo
+            echo "**Package name:** \`com.wordbattle.com\`"
+            echo
+            echo "These fingerprints were extracted from the final signed release APK."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "APK signature and certificate fingerprints verified successfully."
+
+      # =========================================================
+      # 14. Prepare APK, checksum and fingerprint files
+      # =========================================================
+      - name: Prepare signed APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+
+          mkdir -p signed-artifact
+
+          OUTPUT_APK="signed-artifact/WordBattle-v1.0.0-build-${GITHUB_RUN_NUMBER}-signed.apk"
+
+          cp "$APK_PATH" "$OUTPUT_APK"
+
+          cp \
+            signing-certificate.txt \
+            signed-artifact/signing-certificate.txt
+
+          cp \
+            signing-fingerprints.txt \
+            signed-artifact/signing-fingerprints.txt
+
+          sha256sum "$OUTPUT_APK" \
+            | tee signed-artifact/SHA256SUMS.txt
+
+          echo "Prepared signed artifact files:"
+          ls -lh signed-artifact/
+
+      # =========================================================
+      # 15. Upload downloadable signed APK artifact
+      # =========================================================
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WordBattle-signed-${{ github.run_number }}
+          path: signed-artifact/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      # =========================================================
+      # 16. Upload files to GitHub Release for v* tags
+      # =========================================================
+      - name: Attach signed APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="$GITHUB_REF_NAME"
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload \
+              "$TAG_NAME" \
+              signed-artifact/* \
+              --clobber
+          else
+            gh release create \
+              "$TAG_NAME" \
+              signed-artifact/* \
+              --title "Word Battle $TAG_NAME" \
+              --generate-notes
+          fi
+
+      # =========================================================
+      # 17. Always remove temporary keystore
+      # =========================================================
+      - name: Remove temporary keystore
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$GITHUB_WORKSPACE/wordbattle-release.jks"
+          echo "Temporary owner keystore removed."

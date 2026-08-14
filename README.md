@@ -39,7 +39,7 @@ Run [`supabase/schema.sql`](supabase/schema.sql) manually in the Supabase SQL Ed
 - constraints and RLS policies;
 - the host `room_slots` INSERT policy needed by room creation;
 - a host-only `games` INSERT policy; and
-- Realtime publication for `rooms`, `room_slots`, and `games`.
+- Realtime publication for `profiles`, `rooms`, `room_slots`, and `games`.
 
 The app contains only the supplied publishable key. **Never add a `service_role` key to this repository or an Android client.**
 

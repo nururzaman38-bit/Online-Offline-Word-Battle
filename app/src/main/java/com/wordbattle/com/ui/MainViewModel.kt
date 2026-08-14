@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.wordbattle.com.WordBattleApplication
 import com.wordbattle.com.data.dictionary.WordDictionary
 import com.wordbattle.com.data.game.ComputerAI
+import com.wordbattle.com.data.game.RoomManager
 import com.wordbattle.com.data.model.FriendProfile
 import com.wordbattle.com.data.model.GameMode
 import com.wordbattle.com.data.model.GameState
@@ -41,6 +42,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private lateinit var ai: ComputerAI
     private var roomJob: Job? = null
     private var gameJob: Job? = null
+    private var leaderboardJob: Job? = null
+    private var presenceJob: Job? = null
+    private var onlineUserIds: Set<String> = emptySet()
     private var turnTimerJob: Job? = null
     private var toastJob: Job? = null
     private val reportedGameIds = mutableSetOf<String>()
@@ -259,8 +263,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             games.cache(game)
             if (game.mode == GameMode.MIXED_ONLINE) {
-                runCatching { rooms.updateGame(game) }
-                    .onFailure { showToast("Move saved locally; reconnecting…", ToastKind.WARNING) }
+                runCatching {
+                    rooms.updateGame(game)
+                    if (game.status == GameStatus.FINISHED && uiState.value.isHostDevice) {
+                        val room = uiState.value.room
+                        val hostUid = uiState.value.profile?.uid
+                        if (room != null && hostUid != null) rooms.finishRoom(room.roomId, hostUid)
+                    }
+                }.onFailure { showToast("Move saved locally; reconnecting…", ToastKind.WARNING) }
             }
         }
         if (game.status == GameStatus.FINISHED) {
@@ -279,6 +289,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun enterLocalGame(game: GameState, ownedIds: Set<String>) {
         stopRealtime()
+        pauseSocialRealtime()
         _uiState.update {
             it.copy(
                 rootScreen = RootScreen.GAME,
@@ -293,9 +304,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun enterOnlineGame(game: GameState, isHost: Boolean, roomLocalSlots: Int) {
         val profileUid = uiState.value.profile?.uid
-        val owned = if (isHost) {
-            game.players.filter { it.turnOrder < roomLocalSlots }.map { it.id }.toSet()
-        } else listOfNotNull(profileUid).toSet()
+        val owned = RoomManager.ownedPlayerIds(game, profileUid, isHost, roomLocalSlots)
         _uiState.update {
             it.copy(
                 rootScreen = RootScreen.GAME,
@@ -356,7 +365,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         gameJob = viewModelScope.launch {
             rooms.observeGame(gameId).catch { showToast("Game connection lost", ToastKind.WARNING) }.collect { game ->
                 _uiState.update { it.copy(game = game, rootScreen = if (game.status == GameStatus.FINISHED) RootScreen.RESULTS else RootScreen.GAME) }
-                if (game.status == GameStatus.FINISHED) reportFinishedGame(game) else startTurnTimer(game)
+                if (game.status == GameStatus.FINISHED) {
+                    reportFinishedGame(game)
+                    val state = uiState.value
+                    if (state.isHostDevice) {
+                        val room = state.room
+                        val hostUid = state.profile?.uid
+                        if (room != null && hostUid != null) launch { runCatching { rooms.finishRoom(room.roomId, hostUid) } }
+                    }
+                } else startTurnTimer(game)
             }
         }
     }
@@ -428,10 +445,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun goHome() {
         stopRealtime()
         _uiState.update { it.copy(rootScreen = RootScreen.MAIN, mainTab = MainTab.HOME, game = null, room = null, selectedLetter = null) }
+        refreshHomeData()
     }
 
     fun logout() = viewModelScope.launch {
         stopRealtime()
+        pauseSocialRealtime()
         if (!uiState.value.isOfflineGuest) runCatching { auth.signOut() }
         _uiState.value = MainUiState(rootScreen = RootScreen.LOGIN)
     }
@@ -453,14 +472,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!uiState.value.isOfflineGuest) {
             loadLeaderboard()
             loadFriends()
+            startPresence()
+        }
+    }
+
+    private fun startPresence() {
+        val uid = uiState.value.profile?.uid ?: return
+        if (presenceJob?.isActive == true) return
+        presenceJob = viewModelScope.launch {
+            users.observeOnlineUsers(uid)
+                .catch { /* Presence is best-effort; friend data still remains available. */ }
+                .collect { online ->
+                    onlineUserIds = online
+                    _uiState.update { state ->
+                        state.copy(friends = state.friends.map { friend ->
+                            friend.copy(isOnline = friend.profile.uid in online)
+                        })
+                    }
+                }
         }
     }
 
     private fun loadLeaderboard() {
         if (uiState.value.isOfflineGuest) return
-        viewModelScope.launch {
-            runCatching { users.leaderboard(uiState.value.leaderboardWeekly) }
-                .onSuccess { board -> _uiState.update { it.copy(leaderboard = board) } }
+        leaderboardJob?.cancel()
+        val weekly = uiState.value.leaderboardWeekly
+        leaderboardJob = viewModelScope.launch {
+            users.observeLeaderboard(weekly)
+                .catch { /* Keep the last successful board while offline. */ }
+                .collect { board -> _uiState.update { it.copy(leaderboard = board) } }
         }
     }
 
@@ -469,7 +509,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (uiState.value.isOfflineGuest) return
         viewModelScope.launch {
             runCatching { users.friends(uid) }
-                .onSuccess { list -> _uiState.update { it.copy(friends = list) } }
+                .onSuccess { list ->
+                    _uiState.update { state ->
+                        state.copy(friends = list.map { it.copy(isOnline = it.profile.uid in onlineUserIds) })
+                    }
+                }
         }
     }
 
@@ -492,6 +536,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun pauseSocialRealtime() {
+        presenceJob?.cancel(); presenceJob = null
+        leaderboardJob?.cancel(); leaderboardJob = null
+        onlineUserIds = emptySet()
+    }
+
     private fun stopRealtime() {
         roomJob?.cancel(); roomJob = null
         gameJob?.cancel(); gameJob = null
@@ -500,6 +550,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         stopRealtime()
+        presenceJob?.cancel()
+        leaderboardJob?.cancel()
         super.onCleared()
     }
 

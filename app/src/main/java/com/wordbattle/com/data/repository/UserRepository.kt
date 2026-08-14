@@ -9,14 +9,33 @@ import com.wordbattle.com.data.remote.dto.ProfileDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.decodeJoinsAs
+import io.github.jan.supabase.realtime.decodeLeavesAs
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.realtime
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class UserRepository(
     private val client: SupabaseClient,
     private val profileDao: ProfileDao,
     private val json: Json
 ) {
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     suspend fun ensureProfile(fallback: UserProfile): UserProfile {
         val existing = client.from("profiles").select {
             filter { eq("id", fallback.uid) }
@@ -48,6 +67,22 @@ class UserRepository(
             order(if (weekly) "weekly_score" else "wins", Order.DESCENDING)
             limit(100)
         }.decodeList<ProfileDto>().map(ProfileDto::toModel)
+
+    fun observeLeaderboard(weekly: Boolean): Flow<List<UserProfile>> = callbackFlow {
+        send(leaderboard(weekly))
+        val channel = client.channel("leaderboard-${if (weekly) "weekly" else "all"}-${System.nanoTime()}")
+        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "profiles"
+        }
+        val collector = launch {
+            changes.collect { trySend(leaderboard(weekly)) }
+        }
+        channel.subscribe()
+        awaitClose {
+            collector.cancel()
+            cleanupScope.launch { client.realtime.removeChannel(channel) }
+        }
+    }
 
     suspend fun searchProfiles(query: String, currentUid: String): List<UserProfile> {
         if (query.trim().length < 2) return emptyList()
@@ -86,6 +121,24 @@ class UserRepository(
         }
     }
 
+    fun observeOnlineUsers(uid: String): Flow<Set<String>> = callbackFlow {
+        val online = mutableSetOf<String>()
+        val channel = client.channel("word-battle-online")
+        val collector = launch {
+            channel.presenceChangeFlow().collect { change ->
+                change.decodeJoinsAs<PresenceState>().forEach { online += it.uid }
+                change.decodeLeavesAs<PresenceState>().forEach { online -= it.uid }
+                trySend(online.toSet())
+            }
+        }
+        channel.subscribe(blockUntilSubscribed = true)
+        channel.track(buildJsonObject { put("uid", uid) })
+        awaitClose {
+            collector.cancel()
+            cleanupScope.launch { client.realtime.removeChannel(channel) }
+        }
+    }
+
     suspend fun recordFinishedGame(profile: UserProfile, won: Boolean, score: Int): UserProfile {
         val updated = client.from("profiles").update({
             set("games_played", profile.gamesPlayed + 1)
@@ -102,4 +155,7 @@ class UserRepository(
     private suspend fun cache(profile: UserProfile) {
         profileDao.upsert(CachedProfileEntity(profile.uid, json.encodeToString(profile)))
     }
+
+    @Serializable
+    private data class PresenceState(val uid: String)
 }

@@ -1,4 +1,9 @@
 buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
     dependencies {
         // supabase-kt 3.7.0 is built with Kotlin 2.4.0. This also upgrades AGP's built-in KGP.
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0")

@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.wordbattle.com.data.model.UserProfile
+import com.wordbattle.com.ui.components.PlayerAvatar
 import com.wordbattle.com.ui.components.WhiteCard
 import com.wordbattle.com.ui.theme.Gold
 import com.wordbattle.com.ui.theme.Ink
@@ -55,11 +56,7 @@ fun ProfileScreen(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 105.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Surface(modifier = Modifier.size(88.dp), shape = CircleShape, color = Purple, border = BorderStroke(4.dp, Gold), shadowElevation = 10.dp) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(profile?.displayName?.firstOrNull()?.uppercase() ?: "W", color = Color.White, style = MaterialTheme.typography.displayLarge)
-            }
-        }
+        PlayerAvatar(profile, size = 88.dp, borderWidth = 4.dp)
         Spacer(Modifier.size(10.dp))
         Text(profile?.displayName ?: "Word Player", color = Color.White, style = MaterialTheme.typography.headlineMedium)
         Text(if (offline) "Offline Guest" else "Level ${profile?.level ?: 1} Word Warrior", color = Gold, style = MaterialTheme.typography.titleMedium)

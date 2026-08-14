@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.wordbattle.com.data.model.FriendProfile
 import com.wordbattle.com.data.model.UserProfile
 import com.wordbattle.com.ui.components.EmptyState
+import com.wordbattle.com.ui.components.PlayerAvatar
 import com.wordbattle.com.ui.components.WhiteCard
 import com.wordbattle.com.ui.theme.Blue
 import com.wordbattle.com.ui.theme.Ink
@@ -80,7 +81,7 @@ fun FriendsScreen(
             when {
                 query.length >= 2 && searchResults.isNotEmpty() -> {
                     Text("Players", color = Ink, style = MaterialTheme.typography.titleLarge)
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         items(searchResults, key = { it.uid }) { profile ->
                             PersonRow(profile, status = "Tap to connect") {
                                 Button(onClick = { onAdd(profile) }, colors = ButtonDefaults.buttonColors(containerColor = Purple)) { Text("Add") }
@@ -91,7 +92,7 @@ fun FriendsScreen(
                 friends.isEmpty() -> EmptyState(Icons.Default.GroupAdd, "Build your squad", if (offline) "Sign in to add and invite friends." else "Search by player name to send a request.")
                 else -> {
                     Text("Your friends", color = Ink, style = MaterialTheme.typography.titleLarge)
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         items(friends, key = { it.profile.uid }) { friend ->
                             PersonRow(
                                 friend.profile,
@@ -126,9 +127,7 @@ private fun PersonRow(
 ) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
-            Surface(shape = CircleShape, color = Purple.copy(alpha = .12f), modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text(profile.displayName.firstOrNull()?.uppercase() ?: "W", color = Purple, style = MaterialTheme.typography.titleMedium) }
-            }
+            PlayerAvatar(profile, size = 44.dp, borderWidth = 2.dp)
             Box(Modifier.align(Alignment.BottomEnd).size(11.dp).background(if (online) Teal else Muted, CircleShape))
         }
         Spacer(Modifier.size(10.dp))

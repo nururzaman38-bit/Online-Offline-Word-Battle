@@ -129,7 +129,12 @@ create policy "Authenticated users can create games" on public.games for insert 
 drop policy if exists "Anyone involved can update games" on public.games;
 create policy "Anyone involved can update games" on public.games for update using (auth.uid() is not null) with check (auth.uid() is not null);
 
--- Realtime must be enabled for all three synchronized tables.
+-- Realtime powers leaderboard, lobby, and synchronized game updates.
+do $$
+begin
+  alter publication supabase_realtime add table public.profiles;
+exception when duplicate_object then null;
+end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.rooms;

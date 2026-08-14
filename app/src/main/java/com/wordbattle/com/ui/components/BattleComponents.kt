@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -68,6 +69,8 @@ import com.wordbattle.com.ui.theme.PurpleDark
 import com.wordbattle.com.ui.theme.PurpleLight
 import com.wordbattle.com.ui.theme.Red
 import com.wordbattle.com.ui.theme.Teal
+import coil3.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
 fun GradientBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
@@ -129,7 +132,7 @@ fun WhiteCard(
     Card(
         modifier = modifier.then(clickableModifier),
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) selectedColor else Color.Transparent),
+        border = BorderStroke(2.dp, if (selected) selectedColor else Color.Transparent),
         colors = CardDefaults.cardColors(containerColor = CardWhite),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp, pressedElevation = 3.dp)
     ) {
@@ -155,25 +158,57 @@ fun GoldButton(
                 .offset(y = 5.dp)
                 .background(if (enabled) Color(0xFFCC8E00) else Muted, CircleShape)
         )
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            interactionSource = interaction,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Gold,
-                contentColor = Ink,
-                disabledContainerColor = Muted.copy(alpha = .7f),
-                disabledContentColor = Color.White
-            ),
-            elevation = ButtonDefaults.buttonElevation(0.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .background(
+                    if (enabled) Brush.horizontalGradient(listOf(GoldLight, Gold))
+                    else Brush.horizontalGradient(listOf(Muted, Muted.copy(alpha = .75f))),
+                    CircleShape
+                )
+                .clickable(
+                    enabled = enabled,
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = onClick
+                ),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             if (leadingIcon != null) {
-                Icon(leadingIcon, null, Modifier.size(21.dp))
+                Icon(leadingIcon, null, Modifier.size(21.dp), tint = if (enabled) Ink else Color.White)
                 Spacer(Modifier.size(8.dp))
             }
-            Text(text, style = MaterialTheme.typography.labelLarge, fontSize = 18.sp)
+            Text(text, style = MaterialTheme.typography.labelLarge, fontSize = 18.sp, color = if (enabled) Ink else Color.White)
+        }
+    }
+}
+
+@Composable
+fun PlayerAvatar(
+    profile: UserProfile?,
+    size: Dp = 46.dp,
+    borderWidth: Dp = 3.dp,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.size(size),
+        shape = CircleShape,
+        color = PurpleLight,
+        border = BorderStroke(borderWidth, Gold)
+    ) {
+        if (!profile?.photoUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = profile?.photoUrl,
+                contentDescription = profile?.displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(CircleShape)
+            )
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                Text(profile?.displayName?.firstOrNull()?.uppercase() ?: "W", color = Color.White, fontWeight = FontWeight.ExtraBold)
+            }
         }
     }
 }
@@ -185,16 +220,7 @@ fun TopPlayerBar(profile: UserProfile?, onSettings: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box {
-            Surface(
-                modifier = Modifier.size(46.dp),
-                shape = CircleShape,
-                color = PurpleLight,
-                border = BorderStroke(3.dp, Gold)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(profile?.displayName?.firstOrNull()?.uppercase() ?: "W", color = Color.White, fontWeight = FontWeight.ExtraBold)
-                }
-            }
+            PlayerAvatar(profile)
             Surface(
                 modifier = Modifier.align(Alignment.BottomEnd).size(19.dp),
                 shape = CircleShape,

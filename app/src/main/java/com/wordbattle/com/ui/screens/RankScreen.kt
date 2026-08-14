@@ -48,7 +48,7 @@ fun RankScreen(weekly: Boolean, players: List<UserProfile>, onToggle: (Boolean) 
             if (players.isEmpty()) {
                 EmptyState(Icons.Default.EmojiEvents, "No rankings yet", "Play a match or check your connection.")
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
                     itemsIndexed(players, key = { _, it -> it.uid }) { index, player ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(

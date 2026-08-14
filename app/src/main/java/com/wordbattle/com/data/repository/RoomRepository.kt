@@ -1,5 +1,6 @@
 package com.wordbattle.com.data.repository
 
+import com.wordbattle.com.data.game.RoomManager
 import com.wordbattle.com.data.local.CachedRoomEntity
 import com.wordbattle.com.data.local.RoomCacheDao
 import com.wordbattle.com.data.model.BoardState
@@ -19,10 +20,14 @@ import com.wordbattle.com.data.remote.dto.RoomDto
 import com.wordbattle.com.data.remote.dto.RoomSlotDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -39,6 +44,7 @@ class RoomRepository(
     private val json: Json
 ) {
     private val random = SecureRandom()
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
     suspend fun createRoom(profile: UserProfile, localSlots: Int, onlineSlots: Int): Room {
@@ -124,9 +130,7 @@ class RoomRepository(
         val room = requireNotNull(getRoom(roomId)) { "Room not found" }
         require(room.hostId == hostUid) { "Only the host can start" }
         require(room.status == "lobby") { "Room has already started" }
-        require(room.slots.size == room.totalSlots && room.slots.all { it.filledByName != null && it.isReady }) {
-            "All online players must join and be ready"
-        }
+        require(RoomManager.canHostStart(room)) { "All online players must join and be ready" }
         val players = room.slots.sortedBy { it.slotIndex }.map { slot ->
             val isHostLocal = slot.slotIndex < room.localSlotsCount
             Player(
@@ -161,15 +165,13 @@ class RoomRepository(
         client.from("games").update(GameUpdateDto.from(game)) {
             filter { eq("id", game.gameId) }
         }
-        if (game.status == GameStatus.FINISHED) {
-            val gameRoom = client.from("games").select {
-                filter { eq("id", game.gameId) }; limit(1)
-            }.decodeList<GameDto>().firstOrNull()
-            gameRoom?.roomId?.let { roomId ->
-                client.from("rooms").update({ set("status", "finished") }) {
-                    filter { eq("id", roomId) }
-                }
-            }
+    }
+
+    suspend fun finishRoom(roomId: String, hostUid: String) {
+        val room = getRoom(roomId) ?: return
+        if (room.hostId != hostUid) return
+        client.from("rooms").update({ set("status", "finished") }) {
+            filter { eq("id", roomId) }
         }
     }
 
@@ -178,11 +180,11 @@ class RoomRepository(
         val channel = client.channel("room-$roomId-${System.nanoTime()}")
         val slotChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "room_slots"
-            filter = "room_id=eq.$roomId"
+            filter("room_id", FilterOperator.EQ, roomId)
         }
         val roomChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "rooms"
-            filter = "id=eq.$roomId"
+            filter("id", FilterOperator.EQ, roomId)
         }
         val collector = launch {
             merge(slotChanges, roomChanges).collect { getRoom(roomId)?.let { trySend(it) } }
@@ -190,7 +192,7 @@ class RoomRepository(
         channel.subscribe()
         awaitClose {
             collector.cancel()
-            launch { client.realtime.removeChannel(channel) }
+            cleanupScope.launch { client.realtime.removeChannel(channel) }
         }
     }
 
@@ -199,7 +201,7 @@ class RoomRepository(
         val channel = client.channel("game-$gameId-${System.nanoTime()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "games"
-            filter = "id=eq.$gameId"
+            filter("id", FilterOperator.EQ, gameId)
         }
         val collector = launch {
             changes.collect { getGame(gameId)?.let { trySend(it) } }
@@ -207,7 +209,7 @@ class RoomRepository(
         channel.subscribe()
         awaitClose {
             collector.cancel()
-            launch { client.realtime.removeChannel(channel) }
+            cleanupScope.launch { client.realtime.removeChannel(channel) }
         }
     }
 

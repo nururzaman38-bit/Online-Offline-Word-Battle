@@ -45,13 +45,17 @@ The app contains only the supplied publishable key. **Never add a `service_role`
 
 ### 4. ENABLE dictionary
 
-Download ENABLE1 and place it at:
+The complete 172,823-word ENABLE1 list is bundled at:
 
 ```text
 app/src/main/assets/dictionary/enable1.txt
 ```
 
-Words are loaded once on a background dispatcher into an uppercase `HashSet`. A very small built-in development fallback keeps debug/offline flows usable when the manually supplied file is absent; it is not a substitute for ENABLE1 in a release.
+Words are loaded once on a background dispatcher into an uppercase `HashSet`. A small development fallback still protects local development if the asset is accidentally removed.
+
+### 5. Signed GitHub APK
+
+Follow [`docs/RELEASE_SIGNING.md`](docs/RELEASE_SIGNING.md). The GitHub workflow requires `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD`, builds only the release APK, verifies its signing certificate, and fails instead of using any fallback keystore.
 
 ## Build and test
 

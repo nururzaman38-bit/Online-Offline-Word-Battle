@@ -11,7 +11,26 @@ val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use(::load)
 }
-val googleWebClientId = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")
+val googleWebClientId = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")
+    ?.takeIf { it.isNotBlank() }
+    ?: providers.environmentVariable("GOOGLE_WEB_CLIENT_ID").orNull.orEmpty()
+
+// Release builds are intentionally strict: no debug/default keystore fallback is permitted.
+val releaseKeystorePath = providers.gradleProperty("WORD_BATTLE_KEYSTORE_PATH")
+    .orElse(providers.environmentVariable("WORD_BATTLE_KEYSTORE_PATH"))
+    .orNull
+val releaseStorePassword = providers.gradleProperty("WORD_BATTLE_STORE_PASSWORD")
+    .orElse(providers.environmentVariable("WORD_BATTLE_STORE_PASSWORD"))
+    .orElse(providers.environmentVariable("STORE_PASSWORD"))
+    .orNull
+val releaseKeyAlias = providers.gradleProperty("WORD_BATTLE_KEY_ALIAS")
+    .orElse(providers.environmentVariable("WORD_BATTLE_KEY_ALIAS"))
+    .orElse(providers.environmentVariable("KEY_ALIAS"))
+    .orNull
+val releaseKeyPassword = providers.gradleProperty("WORD_BATTLE_KEY_PASSWORD")
+    .orElse(providers.environmentVariable("WORD_BATTLE_KEY_PASSWORD"))
+    .orElse(providers.environmentVariable("KEY_PASSWORD"))
+    .orNull
 
 android {
     namespace = "com.wordbattle.com"
@@ -45,8 +64,18 @@ android {
         "/META-INF/DEPENDENCIES"
     )
 
+    signingConfigs {
+        create("wordBattleRelease") {
+            storeFile = releaseKeystorePath?.let { file(it) }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("wordBattleRelease")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -57,6 +86,28 @@ android {
     }
 
     testOptions.unitTests.isReturnDefaultValues = true
+}
+
+val verifyReleaseSigningInputs = tasks.register("verifyReleaseSigningInputs") {
+    group = "verification"
+    description = "Fails release packaging unless the owner-supplied keystore and credentials are present."
+    doLast {
+        check(!releaseKeystorePath.isNullOrBlank()) {
+            "WORD_BATTLE_KEYSTORE_PATH is required. Release APKs never use a debug/default keystore."
+        }
+        check(file(requireNotNull(releaseKeystorePath)).isFile) {
+            "The configured Word Battle release keystore does not exist: $releaseKeystorePath"
+        }
+        check(!releaseStorePassword.isNullOrBlank()) { "STORE_PASSWORD is required for release signing." }
+        check(!releaseKeyAlias.isNullOrBlank()) { "KEY_ALIAS is required for release signing." }
+        check(!releaseKeyPassword.isNullOrBlank()) { "KEY_PASSWORD is required for release signing." }
+    }
+}
+
+tasks.configureEach {
+    if (name in setOf("validateSigningRelease", "packageRelease", "assembleRelease", "bundleRelease")) {
+        dependsOn(verifyReleaseSigningInputs)
+    }
 }
 
 ksp {

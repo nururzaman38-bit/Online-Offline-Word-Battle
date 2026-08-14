@@ -129,6 +129,19 @@ create policy "Authenticated users can create games" on public.games for insert 
 drop policy if exists "Anyone involved can update games" on public.games;
 create policy "Anyone involved can update games" on public.games for update using (auth.uid() is not null) with check (auth.uid() is not null);
 
+-- Explicit API grants. RLS still decides which rows each role can access.
+grant usage on schema public to anon, authenticated;
+grant select on public.profiles, public.rooms, public.room_slots, public.games to anon, authenticated;
+grant select, insert, update on public.friends to authenticated;
+grant insert, update on public.profiles, public.rooms, public.room_slots, public.games to authenticated;
+revoke insert, update, delete on public.profiles, public.friends, public.rooms, public.room_slots, public.games from anon;
+
+create index if not exists rooms_code_passcode_idx on public.rooms (room_code, passcode);
+create index if not exists room_slots_room_idx on public.room_slots (room_id, slot_index);
+create index if not exists games_room_idx on public.games (room_id);
+create index if not exists profiles_weekly_score_idx on public.profiles (weekly_score desc);
+create index if not exists profiles_wins_idx on public.profiles (wins desc);
+
 -- Realtime powers leaderboard, lobby, and synchronized game updates.
 do $$
 begin

@@ -18,19 +18,19 @@ concurrency:
 
 jobs:
   signed-apk:
-    name: Test and build owner-signed APK
+    name: Test and build PKCS12 owner-signed APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       # =========================================================
-      # 1. Checkout source
+      # 1. Checkout repository
       # =========================================================
       - name: Checkout source
         uses: actions/checkout@v4
 
       # =========================================================
-      # 2. Set up Java 21
+      # 2. Set up Java
       # =========================================================
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -40,7 +40,7 @@ jobs:
           cache: gradle
 
       # =========================================================
-      # 3. Set up Android SDK command-line tools
+      # 3. Set up Android SDK
       # =========================================================
       - name: Set up Android SDK tools
         uses: android-actions/setup-android@v4
@@ -66,11 +66,8 @@ jobs:
           fi
 
           echo "Android SDK root: $SDK_ROOT"
-
           echo "SDK Manager version:"
           sdkmanager --version
-
-          echo "Installing Android API 36..."
 
           sdkmanager --install \
             "platform-tools" \
@@ -90,9 +87,8 @@ jobs:
           echo "Android API 36 installed successfully."
 
       # =========================================================
-      # 5. Configure dependencies for Android API 36
-      # These changes happen only inside GitHub runner
-      # Nothing is committed to the repository
+      # 5. Configure project for available API 36
+      # These changes are temporary and are never committed
       # =========================================================
       - name: Configure project for Android API 36
         shell: bash
@@ -139,40 +135,19 @@ jobs:
 
           gradle_file.write_text(content, encoding="utf-8")
 
-          print("Android API 36 compatibility configuration applied.")
+          print("Android API 36 compatibility settings applied.")
           PY
 
-          echo
-          echo "Effective Android build configuration:"
-          echo "======================================"
+          echo "Effective build configuration:"
 
           grep -nE \
             "compileSdk|targetSdk|compose-bom|core-ktx|lifecycle-runtime-compose|lifecycle-viewmodel-compose" \
             app/build.gradle.kts
 
-          echo "======================================"
-
-          if ! grep -q 'compileSdk = 36' app/build.gradle.kts; then
-            echo "::error::compileSdk was not changed to API 36."
-            exit 1
-          fi
-
-          if ! grep -q 'targetSdk = 36' app/build.gradle.kts; then
-            echo "::error::targetSdk was not changed to API 36."
-            exit 1
-          fi
-
-          if ! grep -q 'lifecycle-runtime-compose:2.10.0' app/build.gradle.kts; then
-            echo "::error::Lifecycle runtime was not changed to 2.10.0."
-            exit 1
-          fi
-
-          if ! grep -q 'lifecycle-viewmodel-compose:2.10.0' app/build.gradle.kts; then
-            echo "::error::Lifecycle ViewModel was not changed to 2.10.0."
-            exit 1
-          fi
-
-          echo "Project successfully configured for Android API 36."
+          grep -q 'compileSdk = 36' app/build.gradle.kts
+          grep -q 'targetSdk = 36' app/build.gradle.kts
+          grep -q 'lifecycle-runtime-compose:2.10.0' app/build.gradle.kts
+          grep -q 'lifecycle-viewmodel-compose:2.10.0' app/build.gradle.kts
 
       # =========================================================
       # 6. Set up Gradle
@@ -181,7 +156,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       # =========================================================
-      # 7. Validate GitHub Secrets
+      # 7. Validate required secrets
       # =========================================================
       - name: Validate required GitHub secrets
         shell: bash
@@ -208,25 +183,23 @@ jobs:
           done
 
           if [[ "$MISSING_SECRET" -ne 0 ]]; then
-            echo "::error::Add all required repository secrets."
+            echo "::error::Add all required signing secrets."
             exit 1
           fi
 
           echo "All required signing secrets are available."
 
       # =========================================================
-      # 8. Restore owner keystore
+      # 8. Restore PKCS#12 keystore from encrypted secret
       # =========================================================
-      - name: Restore owner keystore
+      - name: Restore owner PKCS12 keystore
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
 
-          KEYSTORE_PATH="$GITHUB_WORKSPACE/wordbattle-release.jks"
-
-          echo "Restoring owner keystore..."
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/wordbattle-release.p12"
 
           printf '%s' "$KEYSTORE_BASE64" \
             | tr -d '\r\n ' \
@@ -236,19 +209,19 @@ jobs:
           chmod 600 "$KEYSTORE_PATH"
 
           if [[ ! -s "$KEYSTORE_PATH" ]]; then
-            echo "::error::Decoded keystore is empty."
+            echo "::error::Decoded PKCS12 keystore is empty."
             exit 1
           fi
 
           echo "WORD_BATTLE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
-          echo "Owner keystore restored successfully."
+          echo "PKCS12 keystore restored successfully."
           echo "Keystore size: $(wc -c < "$KEYSTORE_PATH") bytes"
 
       # =========================================================
-      # 9. Validate keystore password and alias
+      # 9. Validate PKCS#12 keystore, password and alias
       # =========================================================
-      - name: Validate owner keystore and alias
+      - name: Validate PKCS12 keystore and alias
         shell: bash
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -257,20 +230,77 @@ jobs:
           set -euo pipefail
 
           if [[ ! -s "$WORD_BATTLE_KEYSTORE_PATH" ]]; then
-            echo "::error::Owner keystore is unavailable."
+            echo "::error::PKCS12 keystore is unavailable."
             exit 1
           fi
 
           keytool -list \
+            -v \
+            -storetype PKCS12 \
             -keystore "$WORD_BATTLE_KEYSTORE_PATH" \
             -storepass "$STORE_PASSWORD" \
             -alias "$KEY_ALIAS" \
-            >/dev/null
+            > keystore-information.txt
 
-          echo "Keystore password and alias are valid."
+          echo "PKCS12 keystore password and alias are valid."
 
       # =========================================================
-      # 10. Verify ENABLE1 dictionary
+      # 10. Extract owner keystore fingerprints before build
+      # =========================================================
+      - name: Read PKCS12 certificate fingerprints
+        shell: bash
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+
+          keytool -list \
+            -v \
+            -storetype PKCS12 \
+            -keystore "$WORD_BATTLE_KEYSTORE_PATH" \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            | tee owner-keystore-certificate.txt
+
+          KEYSTORE_SHA1="$(
+            grep -m 1 'SHA1:' owner-keystore-certificate.txt \
+              | sed 's/.*SHA1:[[:space:]]*//' \
+              | tr -d '\r'
+          )"
+
+          KEYSTORE_SHA256="$(
+            grep -m 1 'SHA256:' owner-keystore-certificate.txt \
+              | sed 's/.*SHA256:[[:space:]]*//' \
+              | tr -d '\r'
+          )"
+
+          if [[ -z "$KEYSTORE_SHA1" ]]; then
+            echo "::error::Unable to read keystore SHA-1."
+            exit 1
+          fi
+
+          if [[ -z "$KEYSTORE_SHA256" ]]; then
+            echo "::error::Unable to read keystore SHA-256."
+            exit 1
+          fi
+
+          {
+            echo "OWNER PKCS12 KEYSTORE FINGERPRINTS"
+            echo "================================"
+            echo
+            echo "SHA-1:"
+            echo "$KEYSTORE_SHA1"
+            echo
+            echo "SHA-256:"
+            echo "$KEYSTORE_SHA256"
+          } | tee owner-keystore-fingerprints.txt
+
+          echo "Owner keystore SHA-1   : $KEYSTORE_SHA1"
+          echo "Owner keystore SHA-256 : $KEYSTORE_SHA256"
+
+      # =========================================================
+      # 11. Verify ENABLE1 dictionary
       # =========================================================
       - name: Verify bundled ENABLE dictionary
         shell: bash
@@ -293,17 +323,15 @@ jobs:
             exit 1
           fi
 
-          echo "ENABLE1 dictionary verified successfully."
-
       # =========================================================
-      # 11. Make Gradle wrapper executable
+      # 12. Make Gradle executable
       # =========================================================
       - name: Make Gradle wrapper executable
         shell: bash
         run: chmod +x ./gradlew
 
       # =========================================================
-      # 12. Run unit tests
+      # 13. Run unit tests
       # =========================================================
       - name: Run unit tests
         shell: bash
@@ -316,9 +344,9 @@ jobs:
             --stacktrace
 
       # =========================================================
-      # 13. Build release APK with owner's keystore
+      # 14. Build owner-signed release APK
       # =========================================================
-      - name: Build owner-signed release APK
+      - name: Build PKCS12 owner-signed release APK
         shell: bash
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
@@ -329,7 +357,7 @@ jobs:
           set -euo pipefail
 
           if [[ ! -s "$WORD_BATTLE_KEYSTORE_PATH" ]]; then
-            echo "::error::Owner keystore is unavailable."
+            echo "::error::Owner PKCS12 keystore is unavailable."
             exit 1
           fi
 
@@ -339,7 +367,7 @@ jobs:
             --stacktrace
 
       # =========================================================
-      # 14. Verify APK and extract SHA-1 / SHA-256
+      # 15. Verify final APK and extract SHA-1/SHA-256
       # =========================================================
       - name: Verify APK and generate signing fingerprints
         id: signing_fingerprints
@@ -361,15 +389,13 @@ jobs:
             exit 1
           fi
 
-          echo "Verifying signed release APK..."
-
           "$APKSIGNER" verify \
             --verbose \
             --print-certs \
             "$APK_PATH" \
             | tee signing-certificate.txt
 
-          SHA1_FINGERPRINT="$(
+          SHA1_RAW="$(
             sed -n \
               's/^Signer #1 certificate SHA-1 digest: //p' \
               signing-certificate.txt \
@@ -377,7 +403,7 @@ jobs:
               | tr -d '\r'
           )"
 
-          SHA256_FINGERPRINT="$(
+          SHA256_RAW="$(
             sed -n \
               's/^Signer #1 certificate SHA-256 digest: //p' \
               signing-certificate.txt \
@@ -385,21 +411,35 @@ jobs:
               | tr -d '\r'
           )"
 
-          if [[ -z "$SHA1_FINGERPRINT" ]]; then
-            echo "::error::Unable to extract SHA-1 fingerprint."
+          if [[ -z "$SHA1_RAW" ]]; then
+            echo "::error::Unable to extract APK SHA-1 fingerprint."
             exit 1
           fi
 
-          if [[ -z "$SHA256_FINGERPRINT" ]]; then
-            echo "::error::Unable to extract SHA-256 fingerprint."
+          if [[ -z "$SHA256_RAW" ]]; then
+            echo "::error::Unable to extract APK SHA-256 fingerprint."
             exit 1
           fi
+
+          SHA1_FINGERPRINT="$(
+            echo "$SHA1_RAW" \
+              | tr '[:lower:]' '[:upper:]' \
+              | sed 's/../&:/g; s/:$//'
+          )"
+
+          SHA256_FINGERPRINT="$(
+            echo "$SHA256_RAW" \
+              | tr '[:lower:]' '[:upper:]' \
+              | sed 's/../&:/g; s/:$//'
+          )"
 
           {
-            echo "WORD BATTLE APK SIGNING FINGERPRINTS"
-            echo "===================================="
+            echo "WORD BATTLE FINAL APK FINGERPRINTS"
+            echo "=================================="
             echo
-            echo "Package name: com.wordbattle.com"
+            echo "Package: com.wordbattle.com"
+            echo
+            echo "Keystore type: PKCS12"
             echo
             echo "SHA-1:"
             echo "$SHA1_FINGERPRINT"
@@ -410,7 +450,7 @@ jobs:
 
           echo
           echo "============================================================"
-          echo "FINAL SIGNED APK CERTIFICATE FINGERPRINTS"
+          echo "FINAL SIGNED APK FINGERPRINTS"
           echo "============================================================"
           echo "Package  : com.wordbattle.com"
           echo "SHA-1    : $SHA1_FINGERPRINT"
@@ -421,22 +461,20 @@ jobs:
           echo "sha256=$SHA256_FINGERPRINT" >> "$GITHUB_OUTPUT"
 
           {
-            echo "## 🔐 APK Signing Certificate Fingerprints"
+            echo "## 🔐 Final APK Signing Certificate"
             echo
             echo "| Type | Fingerprint |"
             echo "|---|---|"
             echo "| **SHA-1** | \`$SHA1_FINGERPRINT\` |"
             echo "| **SHA-256** | \`$SHA256_FINGERPRINT\` |"
             echo
-            echo "**Package name:** \`com.wordbattle.com\`"
+            echo "**Package:** \`com.wordbattle.com\`"
             echo
-            echo "Fingerprints were extracted from the final signed release APK."
+            echo "**Keystore:** PKCS#12"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "APK signature and fingerprints verified successfully."
-
       # =========================================================
-      # 15. Prepare artifact
+      # 16. Prepare APK artifact
       # =========================================================
       - name: Prepare signed APK artifact
         shell: bash
@@ -459,6 +497,10 @@ jobs:
             signing-fingerprints.txt \
             signed-artifact/signing-fingerprints.txt
 
+          cp \
+            owner-keystore-fingerprints.txt \
+            signed-artifact/owner-keystore-fingerprints.txt
+
           sha256sum "$OUTPUT_APK" \
             | tee signed-artifact/SHA256SUMS.txt
 
@@ -466,19 +508,19 @@ jobs:
           ls -lh signed-artifact/
 
       # =========================================================
-      # 16. Upload artifact
+      # 17. Upload signed artifact
       # =========================================================
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WordBattle-signed-${{ github.run_number }}
+          name: WordBattle-PKCS12-signed-${{ github.run_number }}
           path: signed-artifact/
           if-no-files-found: error
           retention-days: 30
           compression-level: 6
 
       # =========================================================
-      # 17. Attach to tagged GitHub Release
+      # 18. Attach to GitHub Release for v* tags
       # =========================================================
       - name: Attach signed APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -504,11 +546,11 @@ jobs:
           fi
 
       # =========================================================
-      # 18. Always remove temporary keystore
+      # 19. Always remove temporary private keystore
       # =========================================================
-      - name: Remove temporary keystore
+      - name: Remove temporary PKCS12 keystore
         if: always()
         shell: bash
         run: |
-          rm -f "$GITHUB_WORKSPACE/wordbattle-release.jks"
-          echo "Temporary owner keystore removed."
+          rm -f "$GITHUB_WORKSPACE/wordbattle-release.p12"
+          echo "Temporary PKCS12 keystore removed."

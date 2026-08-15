@@ -23,13 +23,21 @@ import com.wordbattle.com.ui.screens.AssignmentScreen
 import com.wordbattle.com.ui.screens.GameScreen
 import com.wordbattle.com.ui.screens.IdentityScreen
 import com.wordbattle.com.ui.screens.JoinRoomScreen
+import com.wordbattle.com.ui.screens.LevelSelectScreen
 import com.wordbattle.com.ui.screens.LobbyScreen
 import com.wordbattle.com.ui.screens.LoginScreen
 import com.wordbattle.com.ui.screens.MainShellScreen
+import com.wordbattle.com.ui.screens.MessageThreadScreen
+import com.wordbattle.com.ui.screens.PuzzleGameScreen
 import com.wordbattle.com.ui.screens.ResultsScreen
 import com.wordbattle.com.ui.screens.RoomSetupScreen
 import com.wordbattle.com.ui.screens.SplashScreen
+import com.wordbattle.com.ui.screens.LivesBottomSheet
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Context) {
     BackHandler(enabled = state.rootScreen !in setOf(RootScreen.SPLASH, RootScreen.LOGIN, RootScreen.MAIN)) {
@@ -37,7 +45,6 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
     }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            // Offline / reconnecting state is global, so the strip sits above every screen.
             ConnectionBanner(reconnecting = state.isReconnecting, offline = !state.isOnline)
             Box(Modifier.fillMaxSize()) {
                 when (state.rootScreen) {
@@ -72,7 +79,15 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
                         onNotifications = viewModel::toggleNotifications,
                         onLanguage = viewModel::setLanguage,
                         onEditIdentity = viewModel::openIdentityEditor,
-                        onLogout = viewModel::logout
+                        onLogout = viewModel::logout,
+                        onCampaignClick = viewModel::openCampaign,
+                        onFriendsTabChange = viewModel::selectFriendsTab,
+                        onRequestAccept = viewModel::acceptRequest,
+                        onRequestDecline = viewModel::declineRequest,
+                        onSendLife = viewModel::sendLifeForRequest,
+                        onAcceptGameInvite = viewModel::acceptGameInvite,
+                        onOpenThread = viewModel::openThread,
+                        onMessageClick = viewModel::openThreadFromMessage
                     )
                     RootScreen.ASSIGNMENT -> AssignmentScreen(
                         state.assignmentPlayerCount,
@@ -113,6 +128,38 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
                         onPlayAgain = viewModel::playAgain,
                         onHome = viewModel::goHome
                     )
+                    RootScreen.LEVEL_SELECT -> LevelSelectScreen(
+                        levels = state.campaignLevels,
+                        progress = state.campaignProgress,
+                        currentUnlocked = state.profile?.campaignLevel ?: 1,
+                        onSelectLevel = viewModel::selectCampaignLevel,
+                        onBack = viewModel::goBack
+                    )
+                    RootScreen.PUZZLE_GAME -> {
+                        val level = state.selectedLevel
+                        val puzzle = state.puzzleState
+                        if (level != null && puzzle != null) {
+                            PuzzleGameScreen(
+                                level = level,
+                                puzzleState = puzzle,
+                                elapsedSeconds = state.puzzleElapsedSeconds,
+                                livesCurrent = state.profile?.livesCurrent ?: 3,
+                                livesMax = state.profile?.livesMax ?: 3,
+                                selectedLetter = state.selectedLetter,
+                                wrongCells = state.puzzleWrongCells,
+                                onSelectLetter = viewModel::puzzleSelectLetter,
+                                onPlaceLetter = { r, c -> viewModel.puzzlePlaceLetter(r, c) },
+                                onBack = viewModel::goBack
+                            )
+                        }
+                    }
+                    RootScreen.MESSAGE_THREAD -> MessageThreadScreen(
+                        friend = state.selectedThreadFriend,
+                        messages = state.messageThread,
+                        currentUid = state.profile?.uid,
+                        onSend = viewModel::sendMessage,
+                        onBack = viewModel::goBack
+                    )
                 }
             }
         }
@@ -125,6 +172,27 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
             )
         }
         BattleToastOverlay(state.toast, Modifier.align(Alignment.BottomCenter))
+
+        if (state.showLifeBottomSheet) {
+            ModalBottomSheet(
+                onDismissRequest = viewModel::dismissLifeBottomSheet,
+                sheetState = rememberModalBottomSheetState()
+            ) {
+                LivesBottomSheet(
+                    livesCurrent = state.profile?.livesCurrent ?: 0,
+                    livesMax = state.profile?.livesMax ?: 3,
+                    regenMinutes = state.lifeRegenCountdownMinutes,
+                    coins = state.profile?.coins ?: 0,
+                    onBuyLife = viewModel::buyLife,
+                    onRequestLife = {
+                        // Request life from first friend as example, or open friends tab
+                        val firstFriend = state.friends.firstOrNull()?.profile?.uid
+                        if (firstFriend != null) viewModel.requestLifeFromFriend(firstFriend) else viewModel.dismissLifeBottomSheet()
+                    },
+                    onDismiss = viewModel::dismissLifeBottomSheet
+                )
+            }
+        }
     }
 }
 

@@ -52,11 +52,32 @@ class GameRepository(
         )
     }
 
+    fun createCampaignScoreGame(
+        level: com.wordbattle.com.data.model.LevelDefinition,
+        humanName: String = "You",
+        humanId: String = "campaign-human"
+    ): GameState {
+        require(level.type == com.wordbattle.com.data.model.LevelType.SCORE_ATTACK)
+        val target = level.targetScore ?: 100
+        return newGame(
+            mode = GameMode.CAMPAIGN_SCORE,
+            targetScore = target,
+            players = listOf(
+                Player(humanId, humanName, PlayerType.HUMAN_LOCAL, turnOrder = 0),
+                Player("campaign-ai", "Word Bot", PlayerType.COMPUTER, turnOrder = 1)
+            ),
+            campaignLevelNumber = level.levelNumber,
+            campaignType = level.type
+        )
+    }
+
     fun newGame(
         mode: GameMode,
         targetScore: Int = 100,
         players: List<Player>,
-        gameId: String = UUID.randomUUID().toString()
+        gameId: String = UUID.randomUUID().toString(),
+        campaignLevelNumber: Int? = null,
+        campaignType: com.wordbattle.com.data.model.LevelType? = null
     ): GameState {
         require(players.size in 2..4)
         require(targetScore > 0)
@@ -68,7 +89,10 @@ class GameRepository(
             board = BoardState.empty(),
             players = ordered,
             currentTurnPlayerId = ordered.first().id,
-            status = GameStatus.IN_PROGRESS
+            status = GameStatus.IN_PROGRESS,
+            campaignLevelNumber = campaignLevelNumber,
+            campaignType = campaignType,
+            playerTurnsUsed = 0
         )
     }
 
@@ -141,14 +165,41 @@ class GameRepository(
             status = GameStatus.FINISHED
         }
 
-        val nextPlayerId = if (status == GameStatus.FINISHED) playerId else nextTurn(players, playerId)
+        // Campaign: count only human turns
+        var newTurnsUsed = game.playerTurnsUsed
+        var starsEarned = game.starsEarned
+        if (game.mode == GameMode.CAMPAIGN_SCORE) {
+            // Increment for human player only
+            if (players.firstOrNull { it.id == playerId }?.type == PlayerType.HUMAN_LOCAL) {
+                newTurnsUsed = game.playerTurnsUsed + 1
+            }
+            // Check failure: turnLimit exceeded and target not reached
+            val levelNumber = game.campaignLevelNumber
+            if (levelNumber != null) {
+                val levelDef = com.wordbattle.com.data.game.CampaignLevelCatalog.generateLevelDefinition(levelNumber)
+                val hasReachedTarget = scorer.score >= game.targetScore
+                if (com.wordbattle.com.data.game.CampaignRules.isScoreAttackFailed(levelDef, newTurnsUsed, hasReachedTarget)) {
+                    status = GameStatus.LEVEL_FAILED
+                } else if (hasReachedTarget) {
+                    status = GameStatus.FINISHED
+                    starsEarned = com.wordbattle.com.data.game.CampaignRules.starsForScoreAttack(levelDef, newTurnsUsed)
+                }
+            }
+        }
+
+        val nextPlayerId = when {
+            status == GameStatus.FINISHED || status == GameStatus.LEVEL_FAILED -> playerId
+            else -> nextTurn(players, playerId)
+        }
         val updated = game.copy(
             board = board,
             players = players,
             usedWords = game.usedWords + additions,
             currentTurnPlayerId = nextPlayerId,
             status = status,
-            rankingsAssigned = rankings
+            rankingsAssigned = rankings,
+            playerTurnsUsed = newTurnsUsed,
+            starsEarned = starsEarned
         )
         val outcome = when {
             newWords.isNotEmpty() -> PlacementOutcome.SCORED

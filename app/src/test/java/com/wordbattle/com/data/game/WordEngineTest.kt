@@ -64,4 +64,15 @@ class WordEngineTest {
         assertTrue(WordEngine.place(board, 1, 1, 'B', "p2") == null)
         assertEquals('A', board.cell(1, 1)?.letter)
     }
+
+    @Test
+    fun `segments contain both forward and reversed words`() {
+        var board = BoardState.empty(5, 5)
+        board = requireNotNull(WordEngine.place(board, 2, 0, 'V', "p1"))
+        board = requireNotNull(WordEngine.place(board, 2, 1, 'T', "p1"))
+
+        val words = WordEngine.segments(board, 2, 1, WordAxis.HORIZONTAL).map { it.word }
+        assertTrue(words.contains("VT"))
+        assertTrue(words.contains("TV"))
+    }
 }

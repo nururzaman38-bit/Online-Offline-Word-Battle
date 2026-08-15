@@ -47,3 +47,54 @@ interface RoomCacheDao {
     @Query("DELETE FROM cached_rooms WHERE roomId = :roomId")
     suspend fun delete(roomId: String)
 }
+
+@Dao
+interface CampaignProgressDao {
+    @Query("SELECT * FROM cached_campaign_progress WHERE uid = :uid ORDER BY levelNumber ASC")
+    suspend fun getAllForUser(uid: String): List<CachedCampaignProgressEntity>
+
+    @Query("SELECT * FROM cached_campaign_progress WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): CachedCampaignProgressEntity?
+
+    @Query("SELECT * FROM cached_campaign_progress WHERE uid = :uid AND levelNumber = :level LIMIT 1")
+    suspend fun getForLevel(uid: String, level: Int): CachedCampaignProgressEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(progress: CachedCampaignProgressEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(list: List<CachedCampaignProgressEntity>)
+
+    @Query("DELETE FROM cached_campaign_progress WHERE uid = :uid")
+    suspend fun clearForUser(uid: String)
+}
+
+@Dao
+interface RequestDao {
+    @Query("SELECT * FROM cached_requests")
+    suspend fun getAll(): List<CachedRequestEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(request: CachedRequestEntity)
+
+    @Query("DELETE FROM cached_requests WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM cached_requests")
+    suspend fun clear()
+}
+
+@Dao
+interface MessageDao {
+    @Query("SELECT * FROM cached_messages")
+    suspend fun getAll(): List<CachedMessageEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(message: CachedMessageEntity)
+
+    @Query("DELETE FROM cached_messages WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM cached_messages")
+    suspend fun clear()
+}

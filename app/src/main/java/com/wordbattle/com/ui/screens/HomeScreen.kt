@@ -90,7 +90,8 @@ fun HomeScreen(
     onSelectMode: (Int) -> Unit,
     onPlay: () -> Unit,
     onJoinRoom: () -> Unit,
-    onCreateRoom: () -> Unit
+    onCreateRoom: () -> Unit,
+    onCampaignClick: () -> Unit = {}
 ) {
     val modes = listOf(
         BattleMode(1, R.string.mode_computer_title, R.string.mode_computer_subtitle, Icons.Default.SmartToy, Teal),
@@ -107,6 +108,7 @@ fun HomeScreen(
     ) {
         item { HeroCard(profile = profile, isOffline = isOffline) }
         item { StatsStrip(profile) }
+        item { CampaignCard(profile = profile, onClick = onCampaignClick) }
         item {
             SectionHeader(
                 title = stringResource(R.string.home_choose_battle),
@@ -147,6 +149,34 @@ fun HomeScreen(
             }
         }
         item { ScoringTipCard() }
+    }
+}
+
+@Composable
+private fun CampaignCard(profile: UserProfile?, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = CircleShape, color = Purple.copy(alpha = 0.15f)) {
+                Icon(Icons.Default.Flag, null, tint = Purple, modifier = Modifier.padding(10.dp).size(28.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Campaign", style = MaterialTheme.typography.titleMedium, color = Ink, fontWeight = FontWeight.Bold)
+                Text(
+                    "Level ${profile?.campaignLevel ?: 1}/500 • ⭐ ${profile?.campaignStarsTotal ?: 0}",
+                    color = Muted,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Surface(shape = RoundedCornerShape(12.dp), color = Gold) {
+                Text("PLAY", modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp), color = Ink, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+            }
+        }
     }
 }
 

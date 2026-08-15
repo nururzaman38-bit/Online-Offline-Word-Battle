@@ -259,7 +259,7 @@
     <string name="error_room_code_unavailable">Could not reserve a free room code. Please try again.</string>
     <string name="error_room_create_denied">The server refused to create the room. Run the latest Supabase SQL policies.</string>
     <string name="error_room_create_failed">Could not create the room. Please try again.</string>
-    <string name="error_room_slots_failed">Could not create player seats, so the room was cancelled.</string>
+    <string name="error_room_slots_failed">Could not create player seats, so the room was cancelled. Please update the app to the latest version and run the latest Supabase SQL (supabase/room_creation_fix.sql).</string>
     <string name="error_room_not_found">Room not found. Check the code and passcode.</string>
     <string name="error_room_full">This room is already full.</string>
     <string name="error_room_already_started">This battle has already started.</string>

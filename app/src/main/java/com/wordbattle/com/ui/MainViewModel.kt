@@ -382,7 +382,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val profile = uiState.value.profile
         val unlocked = profile?.campaignLevel ?: 1
         if (level.levelNumber > unlocked) {
-            showToast(UiText.of(R.string.toast_something_wrong, "Locked"), ToastKind.WARNING)
+            showToast(UiText.Res(R.string.error_unknown), ToastKind.WARNING)
             return
         }
         // Lives check for puzzle
@@ -443,7 +443,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val updated = users.purchaseLife(profile.uid, profile.livesCurrent, profile.livesMax, profile.coins)
                 _uiState.update { it.copy(profile = updated, showLifeBottomSheet = false) }
-                showToast(UiText.of(R.string.toast_profile_saved, "Life purchased"), ToastKind.SUCCESS)
+                showToast(UiText.Raw("Life purchased"), ToastKind.SUCCESS)
             } catch (e: Exception) {
                 showToast(UiText.Res(R.string.toast_something_wrong), ToastKind.WARNING)
             }
@@ -582,7 +582,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 // Go to results
                 _uiState.update { it.copy(rootScreen = RootScreen.RESULTS) }
-                showToast(UiText.of(R.string.results_win_subtitle, "Level ${level.levelNumber} cleared! $stars★"), ToastKind.SUCCESS)
+                showToast(UiText.Raw("Level ${level.levelNumber} cleared! $stars★"), ToastKind.SUCCESS)
             } catch (e: Exception) {
                 showToast(e.toUiText(R.string.toast_something_wrong), ToastKind.WARNING)
             }

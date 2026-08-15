@@ -88,7 +88,7 @@ class CampaignRepository(
             return CampaignProgress(existing.levelNumber, existing.stars, existing.bestTimeSeconds, existing.bestTurns)
         }
 
-        val dto = CampaignProgressDto(
+        val newDto = com.wordbattle.com.data.remote.dto.NewCampaignProgressDto(
             userId = uid,
             levelNumber = levelNumber,
             stars = stars,
@@ -97,7 +97,7 @@ class CampaignRepository(
         )
 
         val saved = if (existing == null) {
-            client.from("campaign_progress").insert(dto) { select() }.decodeSingle<CampaignProgressDto>()
+            client.from("campaign_progress").insert(newDto) { select() }.decodeSingle<CampaignProgressDto>()
         } else {
             client.from("campaign_progress").update({
                 set("stars", stars)

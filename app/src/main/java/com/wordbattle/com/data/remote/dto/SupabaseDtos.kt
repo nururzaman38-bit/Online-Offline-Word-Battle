@@ -244,6 +244,15 @@ data class CampaignProgressDto(
 )
 
 @Serializable
+data class NewCampaignProgressDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("level_number") val levelNumber: Int,
+    val stars: Int,
+    @SerialName("best_time_seconds") val bestTimeSeconds: Int? = null,
+    @SerialName("best_turns") val bestTurns: Int? = null
+)
+
+@Serializable
 data class RequestDto(
     val id: String,
     val type: String,

@@ -23,7 +23,12 @@ data class ProfileDto(
     @SerialName("games_played") val gamesPlayed: Int = 0,
     val wins: Int = 0,
     @SerialName("weekly_score") val weeklyScore: Int = 0,
-    @SerialName("display_name_updated_at") val displayNameUpdatedAt: String? = null
+    @SerialName("display_name_updated_at") val displayNameUpdatedAt: String? = null,
+    @SerialName("lives_current") val livesCurrent: Int = 3,
+    @SerialName("lives_max") val livesMax: Int = 3,
+    @SerialName("last_life_regen_at") val lastLifeRegenAt: String? = null,
+    @SerialName("campaign_level") val campaignLevel: Int = 1,
+    @SerialName("campaign_stars_total") val campaignStarsTotal: Int = 0
 ) {
     fun toModel() = UserProfile(
         uid = id,
@@ -36,7 +41,12 @@ data class ProfileDto(
         gamesPlayed = gamesPlayed,
         wins = wins,
         weeklyScore = weeklyScore,
-        displayNameUpdatedAt = displayNameUpdatedAt
+        displayNameUpdatedAt = displayNameUpdatedAt,
+        livesCurrent = livesCurrent,
+        livesMax = livesMax,
+        lastLifeRegenAt = lastLifeRegenAt,
+        campaignLevel = campaignLevel,
+        campaignStarsTotal = campaignStarsTotal
     )
 
     companion object {
@@ -51,7 +61,12 @@ data class ProfileDto(
             gamesPlayed = profile.gamesPlayed,
             wins = profile.wins,
             weeklyScore = profile.weeklyScore,
-            displayNameUpdatedAt = profile.displayNameUpdatedAt
+            displayNameUpdatedAt = profile.displayNameUpdatedAt,
+            livesCurrent = profile.livesCurrent,
+            livesMax = profile.livesMax,
+            lastLifeRegenAt = profile.lastLifeRegenAt,
+            campaignLevel = profile.campaignLevel,
+            campaignStarsTotal = profile.campaignStarsTotal
         )
     }
 }
@@ -128,14 +143,21 @@ data class RoomSlotDto(
  *
  * Deliberately has **no** `id` field: sending `id = null` makes PostgREST write an explicit NULL
  * into a `not null` primary key, which fails instead of letting `gen_random_uuid()` supply a value.
+ *
+ * Also deliberately has **no defaults** on `filled_by`, `filled_by_name`, `is_ready`: Supabase's
+ * Kotlin serializer is configured with `encodeDefaults = false`, so any property left at its
+ * default is omitted from the JSON. PostgREST bulk insert requires every object in the array to
+ * contain exactly the same keys (PGRST102 "All object keys must match"), so host, local and empty
+ * seats must all send the same five keys. Using non-default (explicit) values for every seat keeps
+ * the key set uniform.
  */
 @Serializable
 data class NewRoomSlotDto(
     @SerialName("room_id") val roomId: String,
     @SerialName("slot_index") val slotIndex: Int,
-    @SerialName("filled_by") val filledBy: String? = null,
-    @SerialName("filled_by_name") val filledByName: String? = null,
-    @SerialName("is_ready") val isReady: Boolean = false
+    @SerialName("filled_by") val filledBy: String?,
+    @SerialName("filled_by_name") val filledByName: String?,
+    @SerialName("is_ready") val isReady: Boolean
 )
 
 @Serializable
@@ -156,6 +178,8 @@ data class GameDto(
         when (mode) {
             "computer" -> com.wordbattle.com.data.model.GameMode.COMPUTER
             "local" -> com.wordbattle.com.data.model.GameMode.LOCAL
+            "campaign_score" -> com.wordbattle.com.data.model.GameMode.CAMPAIGN_SCORE
+            "campaign_puzzle" -> com.wordbattle.com.data.model.GameMode.CAMPAIGN_PUZZLE
             else -> com.wordbattle.com.data.model.GameMode.MIXED_ONLINE
         },
         targetScore,
@@ -166,6 +190,7 @@ data class GameDto(
         when (status) {
             "lobby" -> GameStatus.LOBBY
             "finished" -> GameStatus.FINISHED
+            "level_failed" -> GameStatus.LEVEL_FAILED
             else -> GameStatus.IN_PROGRESS
         },
         rankings
@@ -205,3 +230,61 @@ data class GameUpdateDto(
         )
     }
 }
+
+@Serializable
+data class CampaignProgressDto(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String,
+    @SerialName("level_number") val levelNumber: Int,
+    val stars: Int,
+    @SerialName("best_time_seconds") val bestTimeSeconds: Int? = null,
+    @SerialName("best_turns") val bestTurns: Int? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+@Serializable
+data class NewCampaignProgressDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("level_number") val levelNumber: Int,
+    val stars: Int,
+    @SerialName("best_time_seconds") val bestTimeSeconds: Int? = null,
+    @SerialName("best_turns") val bestTurns: Int? = null
+)
+
+@Serializable
+data class RequestDto(
+    val id: String,
+    val type: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("receiver_id") val receiverId: String,
+    val status: String = "pending",
+    val payload: kotlinx.serialization.json.JsonObject? = null,
+    @SerialName("created_at") val createdAt: String
+)
+
+@Serializable
+data class NewRequestDto(
+    val type: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("receiver_id") val receiverId: String,
+    val status: String = "pending",
+    val payload: kotlinx.serialization.json.JsonObject? = null
+)
+
+@Serializable
+data class MessageDto(
+    val id: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("receiver_id") val receiverId: String,
+    val body: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("read_at") val readAt: String? = null
+)
+
+@Serializable
+data class NewMessageDto(
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("receiver_id") val receiverId: String,
+    val body: String
+)

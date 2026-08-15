@@ -89,6 +89,21 @@ fun ProfileScreen(
         }
         Spacer(Modifier.size(12.dp))
         WhiteCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Campaign Progress", color = Ink, style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Campaign: Level ${profile?.campaignLevel ?: 1}/500 • ⭐ ${profile?.campaignStarsTotal ?: 0}",
+                color = Muted,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                "Lives: ${profile?.livesCurrent ?: 3}/${profile?.livesMax ?: 3} • Coins: ${profile?.coins ?: 0}",
+                color = Muted,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Spacer(Modifier.size(12.dp))
+        WhiteCard(modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.profile_settings), color = Ink, style = MaterialTheme.typography.titleLarge)
             SettingRow(
                 Icons.Default.AlternateEmail,

@@ -6,15 +6,21 @@ import com.wordbattle.com.data.model.BoardCoordinate
 import com.wordbattle.com.data.model.GameState
 import kotlin.random.Random
 
-/** Exhaustive, deterministic-capable, fully offline computer player. */
+enum class AiDifficulty { EASY, MEDIUM, HARD }
+
+/** Exhaustive, deterministic-capable, fully offline computer player with difficulty tiers. */
 class ComputerAI(
     private val dictionary: WordDictionary,
-    private val random: Random = Random.Default
+    private val random: Random = Random.Default,
+    private val difficulty: AiDifficulty = AiDifficulty.HARD
 ) {
     fun chooseMove(game: GameState): AiMove? {
         if (game.board.cells.flatten().none { it.letter == null }) return null
         val used = game.usedWords.map { it.word.uppercase() }.toHashSet()
         val candidates = orderedEmptyCells(game)
+
+        // Collect all scored moves for difficulty handling
+        val allMoves = mutableListOf<AiMove>()
         var best: AiMove? = null
 
         candidates.forEach { coordinate ->
@@ -23,16 +29,47 @@ class ComputerAI(
                     game.board, coordinate.row, coordinate.col, letter, game.currentTurnPlayerId
                 ) ?: continue
                 val score = moveScore(simulated, coordinate.row, coordinate.col, used)
+                val move = AiMove(coordinate.row, coordinate.col, letter, score)
+                allMoves += move
                 if (score > (best?.score ?: 0)) {
-                    best = AiMove(coordinate.row, coordinate.col, letter, score)
+                    best = move
                 }
             }
         }
-        if (best != null) return best
 
-        val fallbackCell = candidates.take(adjacentCandidateCount(game).coerceAtLeast(1)).random(random)
-        val commonLetters = charArrayOf('E', 'A', 'O', 'I', 'N')
-        return AiMove(fallbackCell.row, fallbackCell.col, commonLetters.random(random), POINTS_PER_LETTER)
+        if (allMoves.isEmpty()) {
+            // No empty cells (should have returned earlier) – fallback
+            if (candidates.isEmpty()) return null
+            val fallbackCell = candidates.take(adjacentCandidateCount(game).coerceAtLeast(1)).random(random)
+            val commonLetters = charArrayOf('E', 'A', 'O', 'I', 'N')
+            return AiMove(fallbackCell.row, fallbackCell.col, commonLetters.random(random), POINTS_PER_LETTER)
+        }
+
+        return when (difficulty) {
+            AiDifficulty.HARD -> {
+                // Current optimal logic unchanged
+                best ?: allMoves.maxByOrNull { it.score }
+            }
+            AiDifficulty.MEDIUM -> {
+                // Pick randomly among top 3 scoring moves
+                val top = allMoves.sortedByDescending { it.score }.take(3)
+                if (top.isEmpty()) {
+                    best
+                } else {
+                    top.random(random)
+                }
+            }
+            AiDifficulty.EASY -> {
+                // 50% best, 50% fallback random common letter
+                if (random.nextDouble() < 0.5) {
+                    val fallbackCell = candidates.take(adjacentCandidateCount(game).coerceAtLeast(1)).random(random)
+                    val commonLetters = charArrayOf('E', 'A', 'O', 'I', 'N')
+                    AiMove(fallbackCell.row, fallbackCell.col, commonLetters.random(random), POINTS_PER_LETTER)
+                } else {
+                    best ?: allMoves.maxByOrNull { it.score }
+                }
+            }
+        }
     }
 
     /**

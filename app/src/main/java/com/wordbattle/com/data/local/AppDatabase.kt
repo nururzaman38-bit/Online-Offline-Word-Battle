@@ -6,14 +6,24 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [CachedProfileEntity::class, CachedGameEntity::class, CachedRoomEntity::class],
-    version = 1,
+    entities = [
+        CachedProfileEntity::class,
+        CachedGameEntity::class,
+        CachedRoomEntity::class,
+        CachedCampaignProgressEntity::class,
+        CachedRequestEntity::class,
+        CachedMessageEntity::class
+    ],
+    version = 2,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun gameDao(): GameDao
     abstract fun roomCacheDao(): RoomCacheDao
+    abstract fun campaignProgressDao(): CampaignProgressDao
+    abstract fun requestDao(): RequestDao
+    abstract fun messageDao(): MessageDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null

@@ -45,11 +45,23 @@ object WordEngine {
             for (end in originIndex until run.cells.size) {
                 val length = end - start + 1
                 if (length < MIN_WORD_LENGTH) continue
+                val forward = run.word.substring(start, end + 1)
+                val slice = run.cells.subList(start, end + 1).toList()
                 result += CandidateWord(
-                    word = run.word.substring(start, end + 1),
-                    cells = run.cells.subList(start, end + 1).toList(),
+                    word = forward,
+                    cells = slice,
                     axis = axis
                 )
+                val reversed = forward.reversed()
+                if (reversed != forward) {
+                    // Same cells, only the word read in the opposite direction, so the caller
+                    // can check both directions against the dictionary.
+                    result += CandidateWord(
+                        word = reversed,
+                        cells = slice,
+                        axis = axis
+                    )
+                }
             }
         }
         // Longest first so the caller naturally prefers CAT over AT inside the same run.

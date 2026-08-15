@@ -23,3 +23,28 @@ data class CachedRoomEntity(
     val json: String,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "cached_campaign_progress")
+data class CachedCampaignProgressEntity(
+    @PrimaryKey val id: String, // "${uid}-${levelNumber}"
+    val uid: String,
+    val levelNumber: Int,
+    val stars: Int,
+    val bestTimeSeconds: Int? = null,
+    val bestTurns: Int? = null,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "cached_requests")
+data class CachedRequestEntity(
+    @PrimaryKey val id: String,
+    val json: String,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "cached_messages")
+data class CachedMessageEntity(
+    @PrimaryKey val id: String,
+    val json: String,
+    val updatedAt: Long = System.currentTimeMillis()
+)

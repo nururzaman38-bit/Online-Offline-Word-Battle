@@ -54,7 +54,15 @@ fun MainShellScreen(
     onNotifications: () -> Unit,
     onLanguage: (AppLanguage) -> Unit,
     onEditIdentity: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onCampaignClick: () -> Unit = {},
+    onFriendsTabChange: (com.wordbattle.com.ui.FriendsTab) -> Unit = {},
+    onRequestAccept: (com.wordbattle.com.data.model.GameRequest) -> Unit = {},
+    onRequestDecline: (com.wordbattle.com.data.model.GameRequest) -> Unit = {},
+    onSendLife: (com.wordbattle.com.data.model.GameRequest) -> Unit = {},
+    onAcceptGameInvite: (com.wordbattle.com.data.model.GameRequest) -> Unit = {},
+    onOpenThread: (com.wordbattle.com.data.model.UserProfile) -> Unit = {},
+    onMessageClick: (com.wordbattle.com.data.model.ChatMessage) -> Unit = {}
 ) {
     GradientBackground {
         Column(Modifier.fillMaxSize()) {
@@ -68,12 +76,28 @@ fun MainShellScreen(
                         onSelectMode = onSelectMode,
                         onPlay = onPlay,
                         onJoinRoom = onJoinRoom,
-                        onCreateRoom = onCreateRoom
+                        onCreateRoom = onCreateRoom,
+                        onCampaignClick = onCampaignClick
                     )
                     MainTab.RANK -> RankScreen(state.leaderboardWeekly, state.leaderboard, onLeaderboardToggle)
                     MainTab.FRIENDS -> FriendsScreen(
-                        state.friends, state.friendSearchResults, state.isOfflineGuest,
-                        onSearchFriends, onAddFriend, onInviteFriend, onAcceptFriend
+                        friends = state.friends,
+                        searchResults = state.friendSearchResults,
+                        offline = state.isOfflineGuest,
+                        onSearch = onSearchFriends,
+                        onAdd = onAddFriend,
+                        onInvite = onInviteFriend,
+                        onAccept = onAcceptFriend,
+                        friendsTab = state.friendsTab,
+                        onTabChange = onFriendsTabChange,
+                        requests = state.requests,
+                        messages = state.messages,
+                        onRequestAccept = onRequestAccept,
+                        onRequestDecline = onRequestDecline,
+                        onSendLife = onSendLife,
+                        onAcceptGameInvite = onAcceptGameInvite,
+                        onOpenThread = onOpenThread,
+                        onMessageClick = onMessageClick
                     )
                     MainTab.PROFILE -> ProfileScreen(
                         state.profile, state.isOfflineGuest, state.soundEnabled, state.notificationsEnabled,

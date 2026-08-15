@@ -213,6 +213,104 @@ class UserRepository(
         return updated
     }
 
+    suspend fun updateLives(uid: String, livesCurrent: Int, lastRegenAtIso: String): UserProfile {
+        return try {
+            val updated = client.from("profiles").update({
+                set("lives_current", livesCurrent)
+                set("last_life_regen_at", lastRegenAtIso)
+            }) {
+                select()
+                filter { eq("id", uid) }
+            }.decodeSingle<ProfileDto>().toModel()
+            cache(updated)
+            updated
+        } catch (_: Exception) {
+            // Offline fallback: update cached profile locally
+            val cached = profileDao.get(uid)?.let { runCatching { json.decodeFromString<UserProfile>(it.json) }.getOrNull() }
+            val updated = cached?.copy(livesCurrent = livesCurrent, lastLifeRegenAt = lastRegenAtIso)
+                ?: UserProfile(uid, "Player", livesCurrent = livesCurrent, lastLifeRegenAt = lastRegenAtIso)
+            cache(updated)
+            updated
+        }
+    }
+
+    suspend fun consumeLife(uid: String, currentLives: Int): UserProfile {
+        val newLives = (currentLives - 1).coerceAtLeast(0)
+        val now = java.time.Instant.now().toString()
+        return try {
+            val updated = client.from("profiles").update({
+                set("lives_current", newLives)
+                set("last_life_regen_at", now)
+            }) {
+                select()
+                filter { eq("id", uid) }
+            }.decodeSingle<ProfileDto>().toModel()
+            cache(updated)
+            updated
+        } catch (_: Exception) {
+            val cached = profileDao.get(uid)?.let { runCatching { json.decodeFromString<UserProfile>(it.json) }.getOrNull() }
+            val updated = cached?.copy(livesCurrent = newLives, lastLifeRegenAt = now)
+                ?: UserProfile(uid, "Player", livesCurrent = newLives, lastLifeRegenAt = now)
+            cache(updated)
+            updated
+        }
+    }
+
+    suspend fun purchaseLife(uid: String, livesCurrent: Int, livesMax: Int, coins: Int): UserProfile {
+        if (coins < com.wordbattle.com.data.model.CampaignConstants.LIFE_COST_COINS) throw AppException(AppErrorCode.UNKNOWN, "Not enough coins")
+        if (livesCurrent >= livesMax) throw AppException(AppErrorCode.UNKNOWN, "Already at max lives")
+        return try {
+            val updated = client.from("profiles").update({
+                set("lives_current", livesCurrent + 1)
+                set("coins", coins - com.wordbattle.com.data.model.CampaignConstants.LIFE_COST_COINS)
+            }) {
+                select()
+                filter { eq("id", uid) }
+            }.decodeSingle<ProfileDto>().toModel()
+            cache(updated)
+            updated
+        } catch (_: Exception) {
+            // Offline purchase? Allow local deduction if guest? For offline, still allow if coins enough locally
+            val cached = profileDao.get(uid)?.let { runCatching { json.decodeFromString<UserProfile>(it.json) }.getOrNull() }
+            val updated = cached?.copy(
+                livesCurrent = livesCurrent + 1,
+                coins = coins - com.wordbattle.com.data.model.CampaignConstants.LIFE_COST_COINS
+            ) ?: UserProfile(uid, "Player", livesCurrent = livesCurrent + 1, coins = coins - com.wordbattle.com.data.model.CampaignConstants.LIFE_COST_COINS, livesMax = livesMax)
+            cache(updated)
+            updated
+        }
+    }
+
+    suspend fun updateCampaignProgress(
+        uid: String,
+        newCampaignLevel: Int,
+        newStarsTotal: Int,
+        coinsReward: Int,
+        currentCoins: Int
+    ): UserProfile {
+        return try {
+            val updated = client.from("profiles").update({
+                set("campaign_level", newCampaignLevel)
+                set("campaign_stars_total", newStarsTotal)
+                set("coins", currentCoins + coinsReward)
+            }) {
+                select()
+                filter { eq("id", uid) }
+            }.decodeSingle<ProfileDto>().toModel()
+            cache(updated)
+            updated
+        } catch (_: Exception) {
+            val cached = profileDao.get(uid)?.let { runCatching { json.decodeFromString<UserProfile>(it.json) }.getOrNull() }
+            val updated = cached?.copy(
+                campaignLevel = newCampaignLevel,
+                campaignStarsTotal = newStarsTotal,
+                coins = currentCoins + coinsReward
+            ) ?: UserProfile(uid, "Player", campaignLevel = newCampaignLevel, campaignStarsTotal = newStarsTotal, coins = currentCoins + coinsReward)
+            cache(updated)
+            updated
+        }
+    }
+
     private suspend fun cache(profile: UserProfile) {
         profileDao.upsert(CachedProfileEntity(profile.uid, json.encodeToString(profile)))
     }

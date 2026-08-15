@@ -26,11 +26,20 @@ class AppContainer(application: Application) {
         encodeDefaults = true
         explicitNulls = false
     }
+    // For Supabase payloads we want defaults + nulls when explicitly set (campaign, requests)
+    val supabaseJson = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = true
+    }
     val database = AppDatabase.getInstance(application)
     val supabase = SupabaseClientProvider.client
     val userRepository = UserRepository(supabase, database.profileDao(), json)
     val authRepository = AuthRepository(supabase, userRepository)
     val roomRepository = RoomRepository(supabase, database.roomCacheDao(), json)
+    val campaignRepository = com.wordbattle.com.data.repository.CampaignRepository(supabase, database.campaignProgressDao())
+    val requestRepository = com.wordbattle.com.data.repository.RequestRepository(supabase, database.requestDao(), supabaseJson)
+    val messageRepository = com.wordbattle.com.data.repository.MessageRepository(supabase, database.messageDao(), supabaseJson)
 
     /** Single source of truth for internet availability, shared by every screen. */
     val network = NetworkConnectivityObserver(application)

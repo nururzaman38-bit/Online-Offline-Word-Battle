@@ -53,6 +53,41 @@ Key points these policies guarantee:
 
 The app contains only the supplied publishable key. **Never add a `service_role` key to this repository or an Android client.**
 
+### Troubleshooting: Could not create player seats
+
+If online room creation fails with `Could not create player seats, so the room was cancelled.` there are two possible causes:
+
+**a) App bug (now fixed) — PGRST102 bulk insert mismatch**
+
+`RoomRepository.createRoom()` inserts all seats as a single JSON array into `room_slots`. PostgREST rejects a bulk insert when objects don't share exactly the same keys: error `PGRST102 "All object keys must match"`.
+
+`NewRoomSlotDto` previously had defaults (`filled_by = null`, `filled_by_name = null`, `is_ready = false`) and Supabase's Kotlin serializer uses `Json { encodeDefaults = false }`, so any property left at its default is omitted from the JSON:
+
+- host seat (index 0) → 5 keys (`room_id`, `slot_index`, `filled_by`, `filled_by_name`, `is_ready`)
+- local seat → 4 keys (`filled_by` omitted)
+- empty online seat → 2 keys (`room_id`, `slot_index` only)
+
+Every valid shape (1+1, 2+1, 1+2, 3+1, 2+2, 1+3) produced a different key set, so PostgREST rejected all modes and the repository rolled the room back. Fixed by removing defaults from `NewRoomSlotDto` (no `= null` / `= false`) and always passing five explicit arguments in `createRoom()`:
+
+- `index == 0` → `filledBy = uid`, `filledByName = displayName`, `isReady = true`
+- `index < localSlots` → `filledBy = null`, `filledByName = "Local Player ${index+1}"`, `isReady = true`
+- otherwise → `filledBy = null`, `filledByName = null`, `isReady = false`
+
+A regression test `NewRoomSlotDtoTest` encodes with `Json { encodeDefaults = false }` and asserts uniform keys, explicit nulls for empty seats, no `id` key, and coverage of all room shapes.
+
+**b) Missing `room_slots` INSERT policy**
+
+Early database installs had no INSERT policy on `room_slots`, so the room row was created but slot inserts were denied by RLS. The symptom is the same error message.
+
+Solution: run `supabase/room_creation_fix.sql` (or the full `supabase/schema.sql` on a new project) in the Supabase SQL Editor. The file is idempotent and creates:
+
+- `Host can create room slots` INSERT policy
+- `Host can delete own room` DELETE policy (lets the app roll back ghost lobbies)
+- `Player can claim an empty online slot` join policy (only empty online seats)
+- corrected ready-update policies, missing grants, and Realtime publications
+
+Optionally run `supabase/verify_setup.sql` — the `room_slots INSERT policy` row should show `OK`.
+
 ### 4. ENABLE dictionary
 
 The complete 172,823-word ENABLE1 list is bundled at:

@@ -111,16 +111,23 @@ class RoomRepository(
                 index < localSlots -> NewRoomSlotDto(
                     roomId = created.id,
                     slotIndex = index,
+                    filledBy = null,
                     filledByName = "Local Player ${index + 1}",
                     isReady = true
                 )
-                else -> NewRoomSlotDto(roomId = created.id, slotIndex = index)
+                else -> NewRoomSlotDto(
+                    roomId = created.id,
+                    slotIndex = index,
+                    filledBy = null,
+                    filledByName = null,
+                    isReady = false
+                )
             }
         }
         runCatching { client.from("room_slots").insert(slots) }.onFailure { failure ->
             deleteIncompleteRoom(created.id)
             throw AppException(
-                AppErrorCode.ROOM_SLOTS_FAILED,
+                failure.slotFailureCode(),
                 "Room ${created.roomCode} was rolled back: ${failure.message}",
                 failure
             )
@@ -166,6 +173,11 @@ class RoomRepository(
             failure.message,
             failure
         )
+    }
+
+    private fun Throwable.slotFailureCode(): AppErrorCode = when (val code = appErrorCode()) {
+        AppErrorCode.UNKNOWN -> AppErrorCode.ROOM_SLOTS_FAILED
+        else -> code
     }
 
     suspend fun joinRoom(roomCode: String, passcode: String, profile: UserProfile): JoinRoomResult {

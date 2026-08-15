@@ -1,13 +1,22 @@
 package com.wordbattle.com.ui
 
+import com.wordbattle.com.data.model.CampaignProgress
+import com.wordbattle.com.data.model.ChatMessage
 import com.wordbattle.com.data.model.FriendProfile
+import com.wordbattle.com.data.model.GameRequest
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.data.model.GameStatus
+import com.wordbattle.com.data.model.LevelDefinition
 import com.wordbattle.com.data.model.Room
 import com.wordbattle.com.data.model.UserProfile
+import com.wordbattle.com.data.game.PuzzleEngine
 
-enum class RootScreen { SPLASH, LOGIN, IDENTITY, MAIN, ASSIGNMENT, ROOM_SETUP, JOIN_ROOM, LOBBY, GAME, RESULTS }
+enum class RootScreen {
+    SPLASH, LOGIN, IDENTITY, MAIN, ASSIGNMENT, ROOM_SETUP, JOIN_ROOM, LOBBY, GAME, RESULTS,
+    LEVEL_SELECT, PUZZLE_GAME, MESSAGE_THREAD
+}
 enum class MainTab { HOME, RANK, FRIENDS, PROFILE }
+enum class FriendsTab { FRIENDS, MESSAGE, REQUEST }
 enum class ToastKind { DEFAULT, WARNING, SUCCESS }
 
 /**
@@ -48,7 +57,22 @@ data class MainUiState(
     val isReconnecting: Boolean = false,
     /** Set when the identity screen is opened from Profile rather than at first login. */
     val identityEditing: Boolean = false,
-    val toast: BattleToast? = null
+    val toast: BattleToast? = null,
+    // Campaign
+    val campaignLevels: List<LevelDefinition> = emptyList(),
+    val campaignProgress: List<CampaignProgress> = emptyList(),
+    val selectedLevel: LevelDefinition? = null,
+    val puzzleState: PuzzleEngine.PuzzleState? = null,
+    val puzzleElapsedSeconds: Int = 0,
+    val puzzleIsRunning: Boolean = false,
+    val friendsTab: FriendsTab = FriendsTab.FRIENDS,
+    val requests: List<GameRequest> = emptyList(),
+    val messages: List<ChatMessage> = emptyList(),
+    val messageThread: List<ChatMessage> = emptyList(),
+    val selectedThreadFriend: UserProfile? = null,
+    val showLifeBottomSheet: Boolean = false,
+    val lifeRegenCountdownMinutes: Long = 0,
+    val puzzleWrongCells: Set<Pair<Int, Int>> = emptySet()
 ) {
     /** Online play needs both a signed-in account and a working connection. */
     val canPlayOnline: Boolean get() = !isOfflineGuest && profile != null && isOnline

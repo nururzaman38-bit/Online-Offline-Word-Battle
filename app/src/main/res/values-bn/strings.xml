@@ -259,7 +259,7 @@
     <string name="error_room_code_unavailable">খালি রুম কোড পাওয়া যায়নি। আবার চেষ্টা করুন।</string>
     <string name="error_room_create_denied">সার্ভার রুম তৈরি করতে দেয়নি। সর্বশেষ Supabase SQL পলিসি চালান।</string>
     <string name="error_room_create_failed">রুম তৈরি করা যায়নি। আবার চেষ্টা করুন।</string>
-    <string name="error_room_slots_failed">খেলোয়াড়ের আসন তৈরি করা যায়নি, তাই রুমটি বাতিল করা হয়েছে।</string>
+    <string name="error_room_slots_failed">খেলোয়াড়ের আসন তৈরি করা যায়নি, তাই রুমটি বাতিল করা হয়েছে। অনুগ্রহ করে অ্যাপটি সর্বশেষ সংস্করণে আপডেট করুন এবং সর্বশেষ Supabase SQL (supabase/room_creation_fix.sql) চালান।</string>
     <string name="error_room_not_found">রুম পাওয়া যায়নি। কোড ও পাসকোড মিলিয়ে দেখুন।</string>
     <string name="error_room_full">এই রুম ইতিমধ্যেই পূর্ণ।</string>
     <string name="error_room_already_started">এই ব্যাটল ইতিমধ্যেই শুরু হয়ে গেছে।</string>

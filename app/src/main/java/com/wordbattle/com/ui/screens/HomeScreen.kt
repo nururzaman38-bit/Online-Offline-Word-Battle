@@ -170,7 +170,7 @@ private fun CampaignCard(profile: UserProfile?, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("Campaign", style = MaterialTheme.typography.titleMedium, color = Ink, fontWeight = FontWeight.Bold)
                 Text(
-                    "Level ${profile?.campaignLevel ?: 1}/500 • ⭐ ${profile?.campaignStarsTotal ?: 0}",
+                    "Level ${minOf(profile?.campaignLevel ?: 1, 500)}/500 • ⭐ ${profile?.campaignStarsTotal ?: 0}",
                     color = Muted,
                     style = MaterialTheme.typography.bodyMedium
                 )

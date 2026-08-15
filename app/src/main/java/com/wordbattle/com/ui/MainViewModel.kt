@@ -119,7 +119,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val now = Instant.now()
             val result = CampaignRules.regenLives(profile.livesCurrent, profile.livesMax, profile.lastLifeRegenAt, now)
             if (result.regenerated > 0) {
-                users.updateLives(profile.uid, result.newCurrent, result.newLastRegenAtIso)
+                val newProfile = profile.copy(
+                    livesCurrent = result.newCurrent,
+                    lastLifeRegenAt = result.newLastRegenAtIso
+                )
+                // Try remote update, but keep local regen even if offline
+                try {
+                    users.updateLives(profile.uid, result.newCurrent, result.newLastRegenAtIso)
+                } catch (_: Exception) {
+                    // Offline: keep local profile with regen, remote will sync later
+                }
+                newProfile
             } else profile
         } catch (_: Exception) {
             profile
@@ -487,7 +497,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Check wrong guess – if completed line invalid
         val isWrong = PuzzleEngine.isWrongGuess(newPuzzle, row, col, dictionary)
         var wrongCells = state.puzzleWrongCells
-        var livesProfile = state.profile
 
         if (isWrong) {
             wrongCells = wrongCells + (row to col)
@@ -504,6 +513,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             showToast(UiText.of(R.string.toast_move_rejected), ToastKind.WARNING)
+        } else {
+            // If previously marked wrong and now correct, clear red
+            wrongCells = wrongCells - (row to col)
         }
 
         _uiState.update {

@@ -78,6 +78,16 @@ class CampaignRepository(
                 limit(1)
             }.decodeList<CampaignProgressDto>().firstOrNull()
         }.getOrNull()
+            ?: dao.getForLevel(uid, levelNumber)?.let {
+                CampaignProgressDto(
+                    id = it.id,
+                    userId = it.uid,
+                    levelNumber = it.levelNumber,
+                    stars = it.stars,
+                    bestTimeSeconds = it.bestTimeSeconds,
+                    bestTurns = it.bestTurns
+                )
+            }
 
         val shouldSave = if (existing != null) {
             CampaignRules.shouldSaveStars(existing.stars, stars)
@@ -96,31 +106,47 @@ class CampaignRepository(
             bestTurns = bestTurns ?: existing?.bestTurns
         )
 
-        val saved = if (existing == null) {
-            client.from("campaign_progress").insert(newDto) { select() }.decodeSingle<CampaignProgressDto>()
-        } else {
-            client.from("campaign_progress").update({
-                set("stars", stars)
-                if (bestTimeSeconds != null) set("best_time_seconds", bestTimeSeconds)
-                if (bestTurns != null) set("best_turns", bestTurns)
-            }) {
-                filter { eq("user_id", uid); eq("level_number", levelNumber) }
-                select()
-            }.decodeSingle<CampaignProgressDto>()
-        }
+        return try {
+            val saved = if (existing == null || dao.getForLevel(uid, levelNumber) == null && runCatching { client.from("campaign_progress").select { filter { eq("user_id", uid); eq("level_number", levelNumber) }; limit(1) }.decodeList<CampaignProgressDto>().firstOrNull() }.getOrNull() == null) {
+                // No remote existing, insert
+                client.from("campaign_progress").insert(newDto) { select() }.decodeSingle<CampaignProgressDto>()
+            } else {
+                client.from("campaign_progress").update({
+                    set("stars", stars)
+                    if (bestTimeSeconds != null) set("best_time_seconds", bestTimeSeconds)
+                    if (bestTurns != null) set("best_turns", bestTurns)
+                }) {
+                    filter { eq("user_id", uid); eq("level_number", levelNumber) }
+                    select()
+                }.decodeSingle<CampaignProgressDto>()
+            }
 
-        dao.upsert(
-            CachedCampaignProgressEntity(
-                id = "$uid-${saved.levelNumber}",
-                uid = uid,
-                levelNumber = saved.levelNumber,
-                stars = saved.stars,
-                bestTimeSeconds = saved.bestTimeSeconds,
-                bestTurns = saved.bestTurns
+            dao.upsert(
+                CachedCampaignProgressEntity(
+                    id = "$uid-${saved.levelNumber}",
+                    uid = uid,
+                    levelNumber = saved.levelNumber,
+                    stars = saved.stars,
+                    bestTimeSeconds = saved.bestTimeSeconds,
+                    bestTurns = saved.bestTurns
+                )
             )
-        )
 
-        return CampaignProgress(saved.levelNumber, saved.stars, saved.bestTimeSeconds, saved.bestTurns)
+            CampaignProgress(saved.levelNumber, saved.stars, saved.bestTimeSeconds, saved.bestTurns)
+        } catch (_: Exception) {
+            // Offline: save locally only
+            dao.upsert(
+                CachedCampaignProgressEntity(
+                    id = "$uid-$levelNumber",
+                    uid = uid,
+                    levelNumber = levelNumber,
+                    stars = stars,
+                    bestTimeSeconds = bestTimeSeconds ?: existing?.bestTimeSeconds,
+                    bestTurns = bestTurns ?: existing?.bestTurns
+                )
+            )
+            CampaignProgress(levelNumber, stars, bestTimeSeconds ?: existing?.bestTimeSeconds, bestTurns ?: existing?.bestTurns)
+        }
     }
 
     fun observeProgress(uid: String): Flow<List<CampaignProgress>> = callbackFlow {

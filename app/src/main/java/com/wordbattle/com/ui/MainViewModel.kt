@@ -4,17 +4,24 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.wordbattle.com.R
 import com.wordbattle.com.WordBattleApplication
+import com.wordbattle.com.data.audio.GameSound
 import com.wordbattle.com.data.dictionary.WordDictionary
 import com.wordbattle.com.data.game.ComputerAI
+import com.wordbattle.com.data.game.ProfileRules
 import com.wordbattle.com.data.game.RoomManager
+import com.wordbattle.com.data.model.AppErrorCode
 import com.wordbattle.com.data.model.FriendProfile
 import com.wordbattle.com.data.model.GameMode
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.data.model.GameStatus
 import com.wordbattle.com.data.model.JoinRoomResult
+import com.wordbattle.com.data.model.PlacementOutcome
+import com.wordbattle.com.data.model.PlacementResult
 import com.wordbattle.com.data.model.PlayerType
 import com.wordbattle.com.data.model.UserProfile
+import com.wordbattle.com.data.model.appErrorCode
 import com.wordbattle.com.data.repository.GameRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -33,8 +40,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val auth = container.authRepository
     private val users = container.userRepository
     private val rooms = container.roomRepository
+    private val network = container.network
+    private val sound = container.sound
 
-    private val _uiState = MutableStateFlow(MainUiState())
+    private val _uiState = MutableStateFlow(MainUiState(language = AppLanguage.current()))
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
     private lateinit var dictionary: WordDictionary
@@ -48,9 +57,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var turnTimerJob: Job? = null
     private var toastJob: Job? = null
     private val reportedGameIds = mutableSetOf<String>()
+    private val celebratedGameIds = mutableSetOf<String>()
+
+    /** Ids of the Realtime subscriptions to rebuild once the internet comes back. */
+    private var subscribedRoomId: String? = null
+    private var subscribedGameId: String? = null
+
+    /** Action to replay when the user taps Retry in the offline dialog. */
+    private var pendingOnlineAction: (() -> Unit)? = null
 
     init {
         initialize()
+        observeConnectivity()
     }
 
     private fun initialize() = viewModelScope.launch {
@@ -62,41 +80,147 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         minimumSplash.await()
         if (signedIn) {
             val uid = auth.currentUserId()
-            val profile = uid?.let { users.getProfile(it) }
-                ?: uid?.let { UserProfile(it, "Word Player") }
-            _uiState.update { it.copy(rootScreen = RootScreen.MAIN, profile = profile) }
+            val profile = uid?.let { runCatching { users.getProfile(it) }.getOrNull() }
+                ?: uid?.let { UserProfile(it, getApplication<Application>().getString(R.string.profile_default_name)) }
+            _uiState.update {
+                it.copy(rootScreen = landingScreenFor(profile), profile = profile)
+            }
             refreshHomeData()
         } else {
             _uiState.update { it.copy(rootScreen = RootScreen.LOGIN) }
         }
     }
 
-    fun signInWithGoogle(context: Context) = launchBusy {
-        val profile = auth.signInWithGoogle(context)
-        _uiState.update { it.copy(rootScreen = RootScreen.MAIN, profile = profile, isOfflineGuest = false) }
-        showToast("Welcome, ${profile.displayName}!", ToastKind.SUCCESS)
+    /**
+     * Mirrors [com.wordbattle.com.data.network.NetworkConnectivityObserver] into the UI state and
+     * repairs online sessions: Realtime subscriptions are rebuilt as soon as the link is back.
+     */
+    private fun observeConnectivity() {
+        network.start(viewModelScope)
+        viewModelScope.launch {
+            network.isOnline.collect { online ->
+                val wasOnline = uiState.value.isOnline
+                _uiState.update {
+                    it.copy(
+                        isOnline = online,
+                        showOfflineDialog = if (online) false else it.showOfflineDialog,
+                        isReconnecting = !online && it.hasLiveOnlineSession()
+                    )
+                }
+                if (online && !wasOnline) resubscribeRealtime()
+            }
+        }
+    }
+
+    private fun MainUiState.hasLiveOnlineSession(): Boolean =
+        rootScreen in setOf(RootScreen.ROOM_SETUP, RootScreen.LOBBY, RootScreen.GAME) &&
+            (room != null || game?.mode == GameMode.MIXED_ONLINE)
+
+    private fun resubscribeRealtime() {
+        val state = uiState.value
+        if (!state.hasLiveOnlineSession()) {
+            _uiState.update { it.copy(isReconnecting = false) }
+            return
+        }
+        subscribedRoomId?.let { observeRoom(it) }
+        subscribedGameId?.let { observeGame(it) }
+        if (!state.isOfflineGuest) {
+            loadLeaderboard()
+            loadFriends()
+        }
+        _uiState.update { it.copy(isReconnecting = false) }
+        showToast(UiText.Res(R.string.toast_back_online), ToastKind.SUCCESS)
+    }
+
+    /** Runs [block] only when there is internet, otherwise shows the offline dialog. */
+    private fun requireOnline(block: () -> Unit) {
+        if (network.refresh()) {
+            block()
+        } else {
+            pendingOnlineAction = block
+            _uiState.update { it.copy(isOnline = false, showOfflineDialog = true) }
+        }
+    }
+
+    fun dismissOfflineDialog() {
+        pendingOnlineAction = null
+        _uiState.update { it.copy(showOfflineDialog = false) }
+    }
+
+    /** Retry button of the offline dialog: re-check the link and replay the blocked action. */
+    fun retryAfterOffline() {
+        val online = network.refresh()
+        _uiState.update { it.copy(isOnline = online, showOfflineDialog = !online) }
+        if (online) {
+            val action = pendingOnlineAction
+            pendingOnlineAction = null
+            action?.invoke()
+        }
+    }
+
+    fun signInWithGoogle(context: Context) = requireOnline {
+        launchBusy {
+            val profile = auth.signInWithGoogle(context)
+            onSignedIn(profile)
+        }
+    }
+
+    /**
+     * Single email entry point: sign in, and create the account transparently when it does not
+     * exist yet. There is no separate "register" mode in the UI any more.
+     */
+    fun signInWithEmail(email: String, password: String) = requireOnline {
+        launchBusy {
+            val profile = auth.signInOrSignUpWithEmail(email, password)
+            onSignedIn(profile)
+        }
+    }
+
+    private suspend fun onSignedIn(profile: UserProfile) {
+        _uiState.update {
+            it.copy(
+                rootScreen = landingScreenFor(profile),
+                profile = profile,
+                isOfflineGuest = false,
+                identityEditing = false
+            )
+        }
+        showToast(UiText.of(R.string.toast_welcome, profile.displayName), ToastKind.SUCCESS)
         refreshHomeData()
     }
 
-    fun signInWithEmail(email: String, password: String, createAccount: Boolean) = launchBusy {
-        val profile = if (createAccount) auth.signUpWithEmail(email, password) else auth.signInWithEmail(email, password)
-        _uiState.update { it.copy(rootScreen = RootScreen.MAIN, profile = profile, isOfflineGuest = false) }
-        showToast("Welcome, ${profile.displayName}!", ToastKind.SUCCESS)
-        refreshHomeData()
-    }
+    /** First login sends the user to the identity screen until they own a unique username. */
+    private fun landingScreenFor(profile: UserProfile?): RootScreen =
+        if (profile != null && !profile.hasIdentity) RootScreen.IDENTITY else RootScreen.MAIN
 
     fun continueOffline() {
-        val guest = UserProfile("guest-${UUID.randomUUID()}", "Guest Player", coins = 250, level = 1)
+        val guest = UserProfile(
+            "guest-${UUID.randomUUID()}",
+            getApplication<Application>().getString(R.string.profile_guest_name),
+            coins = 250,
+            level = 1
+        )
         _uiState.update { it.copy(rootScreen = RootScreen.MAIN, profile = guest, isOfflineGuest = true) }
-        showToast("Offline mode ready", ToastKind.SUCCESS)
+        showToast(UiText.Res(R.string.toast_offline_ready), ToastKind.SUCCESS)
     }
 
     fun selectMainTab(tab: MainTab) {
-        _uiState.update { it.copy(mainTab = tab) }
         when (tab) {
-            MainTab.RANK -> loadLeaderboard()
-            MainTab.FRIENDS -> loadFriends()
-            else -> Unit
+            MainTab.RANK -> requireOnlineTab(tab) { loadLeaderboard() }
+            MainTab.FRIENDS -> requireOnlineTab(tab) { loadFriends() }
+            else -> _uiState.update { it.copy(mainTab = tab) }
+        }
+    }
+
+    /** Rank and Friends need the network; guests and offline devices stay on the current tab. */
+    private fun requireOnlineTab(tab: MainTab, load: () -> Unit) {
+        if (uiState.value.isOfflineGuest) {
+            _uiState.update { it.copy(mainTab = tab) }
+            return
+        }
+        requireOnline {
+            _uiState.update { it.copy(mainTab = tab) }
+            load()
         }
     }
 
@@ -132,69 +256,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun continueAssignment() {
         val state = uiState.value
+        // A fully local pass-and-play battle must keep working with no network at all.
         if (state.onlineSlots.isEmpty()) {
-            val game = games.createLocalGame(state.assignmentPlayerCount, state.profile?.displayName ?: "Player 1")
+            val game = games.createLocalGame(
+                state.assignmentPlayerCount,
+                state.profile?.displayName
+                    ?: getApplication<Application>().getString(R.string.assignment_player, 1)
+            )
             enterLocalGame(game, game.players.map { it.id }.toSet())
             return
         }
         if (state.isOfflineGuest || state.profile == null) {
-            showToast("Sign in to create an online room", ToastKind.WARNING)
+            showToast(UiText.Res(R.string.toast_sign_in_online_room), ToastKind.WARNING)
             return
         }
-        launchBusy {
+        requireOnline {
+            val profile = uiState.value.profile ?: return@requireOnline
             val localCount = state.assignmentPlayerCount - state.onlineSlots.size
-            val room = rooms.createRoom(state.profile, localCount, state.onlineSlots.size)
-            _uiState.update {
-                it.copy(
-                    room = room,
-                    rootScreen = RootScreen.ROOM_SETUP,
-                    isHostDevice = true,
-                    ownedPlayerIds = setOf(state.profile.uid)
-                )
+            val slotError = RoomManager.validateSlots(localCount, state.onlineSlots.size)
+            if (slotError != null) {
+                showToast(AppErrorCode.INVALID_SLOTS.asUiText(), ToastKind.WARNING)
+                return@requireOnline
             }
-            observeRoom(room.roomId)
+            launchBusy {
+                val room = rooms.createRoom(profile, localCount, state.onlineSlots.size)
+                _uiState.update {
+                    it.copy(
+                        room = room,
+                        rootScreen = RootScreen.ROOM_SETUP,
+                        isHostDevice = true,
+                        ownedPlayerIds = setOf(profile.uid)
+                    )
+                }
+                observeRoom(room.roomId)
+            }
         }
     }
 
     fun openJoinRoom() {
         if (uiState.value.isOfflineGuest) {
-            showToast("Sign in to join online rooms", ToastKind.WARNING)
-        } else {
-            _uiState.update { it.copy(rootScreen = RootScreen.JOIN_ROOM) }
+            showToast(UiText.Res(R.string.toast_sign_in_join), ToastKind.WARNING)
+            return
         }
+        requireOnline { _uiState.update { it.copy(rootScreen = RootScreen.JOIN_ROOM) } }
     }
 
     fun createQuickRoom() {
         val state = uiState.value
         if (state.isOfflineGuest || state.profile == null) {
-            showToast("Sign in to create online rooms", ToastKind.WARNING)
+            showToast(UiText.Res(R.string.toast_sign_in_create), ToastKind.WARNING)
             return
         }
-        _uiState.update {
-            it.copy(
-                rootScreen = RootScreen.ASSIGNMENT,
-                assignmentPlayerCount = 2,
-                selectedModePlayers = 2,
-                onlineSlots = setOf(1)
-            )
+        requireOnline {
+            _uiState.update {
+                it.copy(
+                    rootScreen = RootScreen.ASSIGNMENT,
+                    assignmentPlayerCount = 2,
+                    selectedModePlayers = 2,
+                    onlineSlots = setOf(1)
+                )
+            }
         }
     }
 
     fun joinRoom(code: String, passcode: String) {
         val profile = uiState.value.profile ?: return
-        launchBusy {
-            when (val result = rooms.joinRoom(code, passcode, profile)) {
-                is JoinRoomResult.Error -> showToast(result.message, ToastKind.WARNING)
-                is JoinRoomResult.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            room = result.room,
-                            rootScreen = RootScreen.LOBBY,
-                            isHostDevice = false,
-                            ownedPlayerIds = setOf(profile.uid)
-                        )
+        requireOnline {
+            launchBusy {
+                when (val result = rooms.joinRoom(code, passcode, profile)) {
+                    is JoinRoomResult.Error -> showToast(result.code.asUiText(), ToastKind.WARNING)
+                    is JoinRoomResult.Success -> {
+                        _uiState.update {
+                            it.copy(
+                                room = result.room,
+                                rootScreen = RootScreen.LOBBY,
+                                isHostDevice = false,
+                                ownedPlayerIds = setOf(profile.uid)
+                            )
+                        }
+                        observeRoom(result.room.roomId)
                     }
-                    observeRoom(result.room.roomId)
                 }
             }
         }
@@ -204,45 +345,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val state = uiState.value
         val uid = state.profile?.uid ?: return
         val roomId = state.room?.roomId ?: return
-        launchBusy { rooms.setReady(roomId, uid, ready) }
+        requireOnline { launchBusy { rooms.setReady(roomId, uid, ready) } }
     }
 
     fun startHostedGame() {
         val state = uiState.value
         val uid = state.profile?.uid ?: return
         val room = state.room ?: return
-        launchBusy {
-            val game = rooms.startGame(room.roomId, uid)
-            enterOnlineGame(game, isHost = true, roomLocalSlots = room.localSlotsCount)
+        requireOnline {
+            launchBusy {
+                val game = rooms.startGame(room.roomId, uid)
+                enterOnlineGame(game, isHost = true, roomLocalSlots = room.localSlotsCount)
+            }
         }
     }
 
     fun selectLetter(letter: Char) {
         if (letter.uppercaseChar() !in 'A'..'Z') return
+        val state = uiState.value
+        val game = state.game ?: return
+        // Read-only devices may look at the board but never pick a letter.
+        if (!RoomManager.canPlay(game, state.ownedPlayerIds)) return
         _uiState.update { it.copy(selectedLetter = letter.uppercaseChar()) }
     }
 
     fun placeSelectedLetter(row: Int, col: Int) {
         val state = uiState.value
         val game = state.game ?: return
-        val letter = state.selectedLetter ?: run {
-            showToast("Pick a letter first", ToastKind.WARNING); return
-        }
         val playerId = game.currentTurnPlayerId
-        if (playerId !in state.ownedPlayerIds) {
-            val playerName = game.players.firstOrNull { it.id == playerId }?.name ?: "player"
-            showToast("Waiting for $playerName", ToastKind.WARNING)
+        if (!RoomManager.canPlay(game, state.ownedPlayerIds)) {
+            val playerName = RoomManager.waitingForName(game)
+            showToast(
+                if (playerName != null) UiText.of(R.string.game_waiting_for, playerName)
+                else UiText.Res(R.string.game_waiting_for_player),
+                ToastKind.WARNING
+            )
             return
         }
+        val letter = state.selectedLetter ?: run {
+            showToast(UiText.Res(R.string.toast_pick_letter_first), ToastKind.WARNING); return
+        }
         val result = games.placeLetter(game, playerId, row, col, letter)
-        result.onFailure { showToast(it.message ?: "Move rejected", ToastKind.WARNING) }
+        result.onFailure { showToast(it.toUiText(R.string.toast_move_rejected), ToastKind.WARNING) }
         result.onSuccess { placement ->
             _uiState.update { it.copy(game = placement.gameState, selectedLetter = null) }
-            showToast(
-                placement.message,
-                if (placement.pointsAwarded > 0) ToastKind.SUCCESS
-                else if (placement.repeatedWords.isNotEmpty()) ToastKind.WARNING else ToastKind.DEFAULT
-            )
+            playPlacementSound(placement)
+            showToast(placement.asUiText(), placement.toastKind())
             afterGameChanged(placement.gameState)
         }
     }
@@ -250,10 +398,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun skipCurrentTurn() {
         val state = uiState.value
         val game = state.game ?: return
-        if (game.currentTurnPlayerId !in state.ownedPlayerIds && !state.isHostDevice) return
+        // Only the device owning the current turn may skip it — a host cannot skip for a remote player.
+        if (!RoomManager.canPlay(game, state.ownedPlayerIds)) return
         games.skipTurn(game, game.currentTurnPlayerId).onSuccess {
             _uiState.update { state -> state.copy(game = it, selectedLetter = null) }
-            showToast("Turn skipped", ToastKind.WARNING)
+            showToast(UiText.Res(R.string.toast_turn_skipped), ToastKind.WARNING)
             afterGameChanged(it)
         }
     }
@@ -270,11 +419,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val hostUid = uiState.value.profile?.uid
                         if (room != null && hostUid != null) rooms.finishRoom(room.roomId, hostUid)
                     }
-                }.onFailure { showToast("Move saved locally; reconnecting…", ToastKind.WARNING) }
+                }.onFailure {
+                    _uiState.update { state -> state.copy(isReconnecting = true) }
+                    showToast(UiText.Res(R.string.toast_move_saved_locally), ToastKind.WARNING)
+                }
             }
         }
         if (game.status == GameStatus.FINISHED) {
             _uiState.update { it.copy(rootScreen = RootScreen.RESULTS) }
+            playEndOfGameSound(game)
             reportFinishedGame(game)
             return
         }
@@ -283,7 +436,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun startComputerGame() {
-        val game = games.createComputerGame(uiState.value.profile?.displayName ?: "You")
+        val fallback = getApplication<Application>().getString(R.string.game_you)
+        val game = games.createComputerGame(uiState.value.profile?.displayName ?: fallback)
         enterLocalGame(game, setOf(game.players.first().id))
     }
 
@@ -296,9 +450,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 game = game,
                 ownedPlayerIds = ownedIds,
                 isHostDevice = true,
+                isReconnecting = false,
                 selectedLetter = null
             )
         }
+        celebratedGameIds -= game.gameId
+        sound.startTheme()
         startTurnTimer(game)
     }
 
@@ -314,6 +471,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedLetter = null
             )
         }
+        celebratedGameIds -= game.gameId
+        sound.startTheme()
         observeGame(game.gameId)
         startTurnTimer(game)
     }
@@ -326,7 +485,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val move = ai.chooseMove(current) ?: return@launch
             games.placeLetter(current, "computer", move.row, move.col, move.letter).onSuccess { placement ->
                 _uiState.update { it.copy(game = placement.gameState) }
-                showToast("Word Bot: ${placement.message}", if (placement.pointsAwarded > 0) ToastKind.SUCCESS else ToastKind.DEFAULT)
+                playPlacementSound(placement)
+                showToast(
+                    UiText.of(R.string.toast_bot_move, resolve(placement.asUiText())),
+                    if (placement.pointsAwarded > 0) ToastKind.SUCCESS else ToastKind.DEFAULT
+                )
                 afterGameChanged(placement.gameState)
             }
         }
@@ -341,41 +504,94 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val current = uiState.value.game ?: return@launch
                 if (current.gameId != game.gameId || current.currentTurnPlayerId != game.currentTurnPlayerId) return@launch
                 _uiState.update { it.copy(turnSecondsRemaining = remaining) }
-                if (remaining == 0 && (uiState.value.isHostDevice || current.currentTurnPlayerId in uiState.value.ownedPlayerIds)) {
+                playTimerSound(remaining)
+                // Auto-skip only for a turn this device actually owns; remote turns time out remotely.
+                if (remaining == 0 && RoomManager.canPlay(current, uiState.value.ownedPlayerIds)) {
                     skipCurrentTurn()
                 }
             }
         }
     }
 
-    private fun observeRoom(roomId: String) {
-        roomJob?.cancel()
-        roomJob = viewModelScope.launch {
-            rooms.observeRoom(roomId).catch { showToast("Lobby connection lost", ToastKind.WARNING) }.collect { room ->
-                _uiState.update { it.copy(room = room) }
-                if (room.status == "in_progress" && room.gameId != null && uiState.value.rootScreen !in setOf(RootScreen.GAME, RootScreen.RESULTS)) {
-                    rooms.getGame(room.gameId)?.let { enterOnlineGame(it, uiState.value.isHostDevice, room.localSlotsCount) }
-                }
+    /** Board feedback: a richer chime when the placement actually formed a new word. */
+    private fun playPlacementSound(placement: PlacementResult) {
+        sound.play(GameSound.LETTER_PLACED)
+        if (placement.outcome == PlacementOutcome.SCORED) {
+            viewModelScope.launch {
+                delay(90)
+                sound.play(GameSound.WORD_SCORED)
             }
         }
     }
 
+    /** Ticks down the last seconds of a turn, with a sharper warning inside the final five. */
+    private fun playTimerSound(remaining: Int) {
+        when {
+            remaining == 0 -> Unit
+            remaining <= TIMER_WARNING_SECONDS -> sound.play(GameSound.TIMER_WARNING)
+            remaining <= TIMER_TICK_SECONDS -> sound.play(GameSound.TIMER_TICK)
+        }
+    }
+
+    /** Fanfare (or a soft consolation phrase) once the battle is over. */
+    private fun playEndOfGameSound(game: GameState) {
+        if (!celebratedGameIds.add(game.gameId)) return
+        sound.stopTheme()
+        val owned = uiState.value.ownedPlayerIds
+        val didWin = game.players.any { it.rank == 1 && (it.id in owned || owned.isEmpty()) }
+        sound.play(if (didWin) GameSound.VICTORY else GameSound.DEFEAT)
+    }
+
+    private fun observeRoom(roomId: String) {
+        subscribedRoomId = roomId
+        roomJob?.cancel()
+        roomJob = viewModelScope.launch {
+            rooms.observeRoom(roomId)
+                .catch { onRealtimeDropped(R.string.toast_lobby_connection_lost) }
+                .collect { room ->
+                    _uiState.update { it.copy(room = room, isReconnecting = false) }
+                    if (room.status == "in_progress" && room.gameId != null &&
+                        uiState.value.rootScreen !in setOf(RootScreen.GAME, RootScreen.RESULTS)
+                    ) {
+                        runCatching { rooms.getGame(room.gameId) }.getOrNull()
+                            ?.let { enterOnlineGame(it, uiState.value.isHostDevice, room.localSlotsCount) }
+                    }
+                }
+        }
+    }
+
     private fun observeGame(gameId: String) {
+        subscribedGameId = gameId
         gameJob?.cancel()
         gameJob = viewModelScope.launch {
-            rooms.observeGame(gameId).catch { showToast("Game connection lost", ToastKind.WARNING) }.collect { game ->
-                _uiState.update { it.copy(game = game, rootScreen = if (game.status == GameStatus.FINISHED) RootScreen.RESULTS else RootScreen.GAME) }
-                if (game.status == GameStatus.FINISHED) {
-                    reportFinishedGame(game)
-                    val state = uiState.value
-                    if (state.isHostDevice) {
-                        val room = state.room
-                        val hostUid = state.profile?.uid
-                        if (room != null && hostUid != null) launch { runCatching { rooms.finishRoom(room.roomId, hostUid) } }
+            rooms.observeGame(gameId)
+                .catch { onRealtimeDropped(R.string.toast_game_connection_lost) }
+                .collect { game ->
+                    _uiState.update {
+                        it.copy(
+                            game = game,
+                            isReconnecting = false,
+                            rootScreen = if (game.status == GameStatus.FINISHED) RootScreen.RESULTS else RootScreen.GAME
+                        )
                     }
-                } else startTurnTimer(game)
-            }
+                    if (game.status == GameStatus.FINISHED) {
+                        playEndOfGameSound(game)
+                        reportFinishedGame(game)
+                        val state = uiState.value
+                        if (state.isHostDevice) {
+                            val room = state.room
+                            val hostUid = state.profile?.uid
+                            if (room != null && hostUid != null) launch { runCatching { rooms.finishRoom(room.roomId, hostUid) } }
+                        }
+                    } else startTurnTimer(game)
+                }
         }
+    }
+
+    /** A dropped Realtime stream shows the reconnecting banner; recovery happens on reconnect. */
+    private fun onRealtimeDropped(messageRes: Int) {
+        _uiState.update { it.copy(isReconnecting = true) }
+        showToast(UiText.Res(messageRes), ToastKind.WARNING)
     }
 
     fun setLeaderboardWeekly(weekly: Boolean) {
@@ -385,7 +601,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun searchFriends(query: String) {
         val uid = uiState.value.profile?.uid ?: return
-        if (uiState.value.isOfflineGuest) return
+        if (uiState.value.isOfflineGuest || !uiState.value.isOnline) return
         viewModelScope.launch {
             val results = runCatching { users.searchProfiles(query, uid) }.getOrElse { emptyList() }
             _uiState.update { it.copy(friendSearchResults = results) }
@@ -394,37 +610,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addFriend(profile: UserProfile) {
         val uid = uiState.value.profile?.uid ?: return
-        launchBusy {
-            users.addFriend(uid, profile.uid)
-            showToast("Friend request sent", ToastKind.SUCCESS)
-            _uiState.update { it.copy(friendSearchResults = emptyList()) }
-            loadFriends()
+        requireOnline {
+            launchBusy {
+                users.addFriend(uid, profile.uid)
+                showToast(UiText.Res(R.string.toast_friend_request_sent), ToastKind.SUCCESS)
+                _uiState.update { it.copy(friendSearchResults = emptyList()) }
+                loadFriends()
+            }
         }
     }
 
     fun acceptFriend(friend: FriendProfile) {
         val uid = uiState.value.profile?.uid ?: return
-        launchBusy {
-            users.acceptFriend(uid, friend.profile.uid)
-            showToast("Friend added", ToastKind.SUCCESS)
-            loadFriends()
+        requireOnline {
+            launchBusy {
+                users.acceptFriend(uid, friend.profile.uid)
+                showToast(UiText.Res(R.string.toast_friend_added), ToastKind.SUCCESS)
+                loadFriends()
+            }
         }
     }
 
     fun inviteFriend(friend: FriendProfile) {
         createQuickRoom()
-        showToast("Create the room, then share its code with ${friend.profile.displayName}")
+        showToast(UiText.of(R.string.toast_invite_hint, friend.profile.displayName))
     }
 
-    fun toggleSound() = _uiState.update { it.copy(soundEnabled = !it.soundEnabled) }
+    fun toggleSound() {
+        val enabled = !uiState.value.soundEnabled
+        sound.enabled = enabled
+        _uiState.update { it.copy(soundEnabled = enabled) }
+    }
+
     fun toggleNotifications() = _uiState.update { it.copy(notificationsEnabled = !it.notificationsEnabled) }
-    fun setLanguage(language: String) = _uiState.update { it.copy(language = language) }
+
+    /** Applies the locale immediately (AppCompat recreates the activity) and remembers it. */
+    fun setLanguage(language: AppLanguage) {
+        _uiState.update { it.copy(language = language) }
+        AppLanguage.apply(language)
+    }
+
+    fun openIdentityEditor() {
+        _uiState.update { it.copy(rootScreen = RootScreen.IDENTITY, identityEditing = true) }
+    }
+
+    /** Saves the display name + unique username chosen on the first-login/identity screen. */
+    fun saveIdentity(displayName: String, username: String) {
+        val profile = uiState.value.profile ?: return
+        if (uiState.value.isOfflineGuest) {
+            _uiState.update { it.copy(rootScreen = RootScreen.MAIN, identityEditing = false) }
+            return
+        }
+        requireOnline {
+            launchBusy {
+                val updated = users.updateIdentity(profile, displayName, username)
+                _uiState.update {
+                    it.copy(profile = updated, rootScreen = RootScreen.MAIN, identityEditing = false)
+                }
+                showToast(UiText.Res(R.string.toast_profile_saved), ToastKind.SUCCESS)
+            }
+        }
+    }
+
+    /** Whole days left before the display name may change again (0 = allowed now). */
+    fun displayNameCooldownDays(): Int =
+        ProfileRules.cooldownDaysRemaining(uiState.value.profile?.displayNameUpdatedAt)
 
     fun playAgain() {
         val game = uiState.value.game ?: return
         if (game.mode == GameMode.MIXED_ONLINE) {
             goHome()
-            showToast("Create a fresh room for the rematch")
+            showToast(UiText.Res(R.string.toast_rematch_new_room))
             return
         }
         val resetPlayers = game.players.map { it.copy(score = 0, rank = null) }
@@ -436,7 +692,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun goBack() {
         when (uiState.value.rootScreen) {
             RootScreen.ASSIGNMENT, RootScreen.JOIN_ROOM -> _uiState.update { it.copy(rootScreen = RootScreen.MAIN) }
-            RootScreen.ROOM_SETUP, RootScreen.LOBBY -> { stopRealtime(); _uiState.update { it.copy(rootScreen = RootScreen.MAIN, room = null) } }
+            RootScreen.IDENTITY ->
+                if (uiState.value.identityEditing) {
+                    _uiState.update { it.copy(rootScreen = RootScreen.MAIN, identityEditing = false) }
+                } else Unit // first login must complete the identity step
+            RootScreen.ROOM_SETUP, RootScreen.LOBBY -> {
+                stopRealtime()
+                _uiState.update { it.copy(rootScreen = RootScreen.MAIN, room = null, isReconnecting = false) }
+            }
             RootScreen.GAME, RootScreen.RESULTS -> goHome()
             else -> Unit
         }
@@ -444,15 +707,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun goHome() {
         stopRealtime()
-        _uiState.update { it.copy(rootScreen = RootScreen.MAIN, mainTab = MainTab.HOME, game = null, room = null, selectedLetter = null) }
+        sound.stopTheme()
+        _uiState.update {
+            it.copy(
+                rootScreen = RootScreen.MAIN,
+                mainTab = MainTab.HOME,
+                game = null,
+                room = null,
+                selectedLetter = null,
+                isReconnecting = false
+            )
+        }
         refreshHomeData()
     }
 
     fun logout() = viewModelScope.launch {
         stopRealtime()
+        sound.stopTheme()
         pauseSocialRealtime()
         if (!uiState.value.isOfflineGuest) runCatching { auth.signOut() }
-        _uiState.value = MainUiState(rootScreen = RootScreen.LOGIN)
+        _uiState.value = MainUiState(
+            rootScreen = RootScreen.LOGIN,
+            language = uiState.value.language,
+            isOnline = network.isCurrentlyOnline
+        )
     }
 
     private fun reportFinishedGame(game: GameState) {
@@ -469,7 +747,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun refreshHomeData() {
-        if (!uiState.value.isOfflineGuest) {
+        if (!uiState.value.isOfflineGuest && uiState.value.isOnline) {
             loadLeaderboard()
             loadFriends()
             startPresence()
@@ -494,7 +772,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadLeaderboard() {
-        if (uiState.value.isOfflineGuest) return
+        if (uiState.value.isOfflineGuest || !uiState.value.isOnline) return
         leaderboardJob?.cancel()
         val weekly = uiState.value.leaderboardWeekly
         leaderboardJob = viewModelScope.launch {
@@ -506,7 +784,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadFriends() {
         val uid = uiState.value.profile?.uid ?: return
-        if (uiState.value.isOfflineGuest) return
+        if (uiState.value.isOfflineGuest || !uiState.value.isOnline) return
         viewModelScope.launch {
             runCatching { users.friends(uid) }
                 .onSuccess { list ->
@@ -521,19 +799,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (uiState.value.isBusy) return
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true) }
-            runCatching { block() }.onFailure { showToast(it.message ?: "Something went wrong", ToastKind.WARNING) }
+            runCatching { block() }.onFailure { failure ->
+                val code = failure.appErrorCode()
+                if (code == AppErrorCode.NO_INTERNET) {
+                    _uiState.update { it.copy(isOnline = false, showOfflineDialog = true) }
+                }
+                showToast(code.asUiText(), ToastKind.WARNING)
+            }
             _uiState.update { it.copy(isBusy = false) }
         }
     }
 
-    private fun showToast(message: String, kind: ToastKind = ToastKind.DEFAULT) {
-        val toast = BattleToast(System.nanoTime(), message, kind)
+    private fun showToast(text: UiText, kind: ToastKind = ToastKind.DEFAULT) {
+        val toast = BattleToast(System.nanoTime(), text, kind)
         _uiState.update { it.copy(toast = toast) }
         toastJob?.cancel()
         toastJob = viewModelScope.launch {
             delay(1_750)
             _uiState.update { state -> if (state.toast?.id == toast.id) state.copy(toast = null) else state }
         }
+    }
+
+    /** Resolves a [UiText] with the application context, used when composing a longer message. */
+    private fun resolve(text: UiText): String = text.resolve(getApplication())
+
+    private fun Throwable.toUiText(fallbackRes: Int): UiText {
+        val code = appErrorCode()
+        return if (code == AppErrorCode.UNKNOWN) UiText.Res(fallbackRes) else code.asUiText()
+    }
+
+    private fun PlacementResult.asUiText(): UiText = when (outcome) {
+        PlacementOutcome.SCORED -> UiText.of(
+            R.string.placement_scored,
+            pointsAwarded,
+            newWords.joinToString(" + ")
+        )
+        // Every placement still banks a point, so the toast always leads with the score.
+        PlacementOutcome.REPEATED_WORD -> UiText.of(R.string.placement_repeated, pointsAwarded)
+        PlacementOutcome.NO_WORD -> UiText.of(R.string.placement_no_word, pointsAwarded)
+        PlacementOutcome.LETTER_PLACED -> UiText.of(R.string.placement_letter_placed, pointsAwarded)
+    }
+
+    private fun PlacementResult.toastKind(): ToastKind = when {
+        pointsAwarded > 0 -> ToastKind.SUCCESS
+        repeatedWords.isNotEmpty() -> ToastKind.WARNING
+        else -> ToastKind.DEFAULT
     }
 
     private fun pauseSocialRealtime() {
@@ -546,10 +856,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         roomJob?.cancel(); roomJob = null
         gameJob?.cancel(); gameJob = null
         turnTimerJob?.cancel(); turnTimerJob = null
+        subscribedRoomId = null
+        subscribedGameId = null
     }
 
     override fun onCleared() {
         stopRealtime()
+        sound.stopTheme()
         presenceJob?.cancel()
         leaderboardJob?.cancel()
         super.onCleared()
@@ -557,5 +870,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val TURN_TIMEOUT_SECONDS = 45
+
+        /** Below this many seconds the turn timer starts ticking audibly. */
+        const val TIMER_TICK_SECONDS = 10
+
+        /** Below this many seconds the tick becomes an urgent warning beep. */
+        const val TIMER_WARNING_SECONDS = 5
     }
 }

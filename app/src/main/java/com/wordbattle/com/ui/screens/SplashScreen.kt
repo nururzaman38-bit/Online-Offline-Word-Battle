@@ -23,7 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.wordbattle.com.R
 import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.components.LetterTile
 import com.wordbattle.com.ui.theme.Gold
@@ -48,14 +50,18 @@ fun SplashScreen() {
             }
             Spacer(Modifier.height(34.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                "WORD".forEachIndexed { index, char -> LetterTile(char, size = 43.dp, rotationSeed = index) }
+                stringResource(R.string.brand_word).forEachIndexed { index, char ->
+                    LetterTile(char, size = 43.dp, rotationSeed = index)
+                }
             }
             Spacer(Modifier.height(7.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                "BATTLE".forEachIndexed { index, char -> LetterTile(char, size = 43.dp, rotationSeed = index + 9) }
+                stringResource(R.string.brand_battle).forEachIndexed { index, char ->
+                    LetterTile(char, size = 43.dp, rotationSeed = index + 9)
+                }
             }
             Spacer(Modifier.height(22.dp))
-            Text("Build words. Win battles.", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.brand_tagline), color = Color.White, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(42.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeat(3) { index ->

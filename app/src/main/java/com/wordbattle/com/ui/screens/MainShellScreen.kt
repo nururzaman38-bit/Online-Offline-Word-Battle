@@ -21,11 +21,13 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.wordbattle.com.R
+import com.wordbattle.com.ui.AppLanguage
 import com.wordbattle.com.ui.MainTab
 import com.wordbattle.com.ui.MainUiState
 import com.wordbattle.com.ui.components.GradientBackground
@@ -33,7 +35,7 @@ import com.wordbattle.com.ui.components.TopPlayerBar
 import com.wordbattle.com.ui.theme.Muted
 import com.wordbattle.com.ui.theme.PurpleLight
 
-private data class TabItem(val tab: MainTab, val title: String, val icon: ImageVector)
+private data class TabItem(val tab: MainTab, @androidx.annotation.StringRes val title: Int, val icon: ImageVector)
 
 @Composable
 fun MainShellScreen(
@@ -50,7 +52,8 @@ fun MainShellScreen(
     onAcceptFriend: (com.wordbattle.com.data.model.FriendProfile) -> Unit,
     onSound: () -> Unit,
     onNotifications: () -> Unit,
-    onLanguage: (String) -> Unit,
+    onLanguage: (AppLanguage) -> Unit,
+    onEditIdentity: () -> Unit,
     onLogout: () -> Unit
 ) {
     GradientBackground {
@@ -58,7 +61,15 @@ fun MainShellScreen(
             TopPlayerBar(state.profile) { onTab(MainTab.PROFILE) }
             Box(Modifier.weight(1f)) {
                 when (state.mainTab) {
-                    MainTab.HOME -> HomeScreen(state.selectedModePlayers, onSelectMode, onPlay, onJoinRoom, onCreateRoom)
+                    MainTab.HOME -> HomeScreen(
+                        profile = state.profile,
+                        selectedPlayers = state.selectedModePlayers,
+                        isOffline = !state.isOnline,
+                        onSelectMode = onSelectMode,
+                        onPlay = onPlay,
+                        onJoinRoom = onJoinRoom,
+                        onCreateRoom = onCreateRoom
+                    )
                     MainTab.RANK -> RankScreen(state.leaderboardWeekly, state.leaderboard, onLeaderboardToggle)
                     MainTab.FRIENDS -> FriendsScreen(
                         state.friends, state.friendSearchResults, state.isOfflineGuest,
@@ -66,7 +77,7 @@ fun MainShellScreen(
                     )
                     MainTab.PROFILE -> ProfileScreen(
                         state.profile, state.isOfflineGuest, state.soundEnabled, state.notificationsEnabled,
-                        state.language, onSound, onNotifications, onLanguage, onLogout
+                        state.language, onSound, onNotifications, onLanguage, onEditIdentity, onLogout
                     )
                 }
             }
@@ -78,10 +89,10 @@ fun MainShellScreen(
 @Composable
 private fun BottomBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
     val tabs = listOf(
-        TabItem(MainTab.HOME, "Home", Icons.Default.Home),
-        TabItem(MainTab.RANK, "Rank", Icons.Default.Leaderboard),
-        TabItem(MainTab.FRIENDS, "Friends", Icons.Default.Groups),
-        TabItem(MainTab.PROFILE, "Profile", Icons.Default.Person)
+        TabItem(MainTab.HOME, R.string.tab_home, Icons.Default.Home),
+        TabItem(MainTab.RANK, R.string.tab_rank, Icons.Default.Leaderboard),
+        TabItem(MainTab.FRIENDS, R.string.tab_friends, Icons.Default.Groups),
+        TabItem(MainTab.PROFILE, R.string.tab_profile, Icons.Default.Person)
     )
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -92,17 +103,18 @@ private fun BottomBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 5.dp)) {
             tabs.forEach { item ->
                 val active = selected == item.tab
+                val title = stringResource(item.title)
                 NavigationBarItem(
                     selected = active,
                     onClick = { onSelect(item.tab) },
                     icon = {
                         Icon(
                             item.icon,
-                            item.title,
+                            title,
                             modifier = Modifier.size(23.dp).offset(y = if (active) (-2).dp else 0.dp)
                         )
                     },
-                    label = { Text(item.title, style = MaterialTheme.typography.labelMedium) },
+                    label = { Text(title, style = MaterialTheme.typography.labelMedium) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = PurpleLight,
                         selectedTextColor = PurpleLight,

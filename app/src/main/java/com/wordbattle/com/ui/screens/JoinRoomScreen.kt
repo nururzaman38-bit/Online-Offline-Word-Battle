@@ -26,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.wordbattle.com.R
 import com.wordbattle.com.ui.components.GoldButton
 import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.components.WhiteCard
@@ -42,19 +44,19 @@ fun JoinRoomScreen(busy: Boolean, onJoin: (String, String) -> Unit, onBack: () -
     GradientBackground {
         Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
-                Text("Join a Room", color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
+                Text(stringResource(R.string.join_title), color = Color.White, style = MaterialTheme.typography.headlineMedium)
             }
             Spacer(Modifier.weight(.35f))
             WhiteCard(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
                 Icon(Icons.Default.MeetingRoom, null, tint = Purple, modifier = Modifier.align(Alignment.CenterHorizontally).size(44.dp))
-                Text("Enter battle details", style = MaterialTheme.typography.titleLarge, color = Ink, modifier = Modifier.align(Alignment.CenterHorizontally))
-                Text("Ask the host for both codes.", color = Muted, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(stringResource(R.string.join_card_title), style = MaterialTheme.typography.titleLarge, color = Ink, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(stringResource(R.string.join_card_subtitle), color = Muted, modifier = Modifier.align(Alignment.CenterHorizontally))
                 Spacer(Modifier.size(18.dp))
                 OutlinedTextField(
                     value = code,
                     onValueChange = { value -> code = value.uppercase().filter { it.isLetterOrDigit() }.take(6) },
-                    label = { Text("6-character Room Code") },
+                    label = { Text(stringResource(R.string.join_code_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Purple)
@@ -63,14 +65,14 @@ fun JoinRoomScreen(busy: Boolean, onJoin: (String, String) -> Unit, onBack: () -
                 OutlinedTextField(
                     value = passcode,
                     onValueChange = { value -> passcode = value.filter(Char::isDigit).take(4) },
-                    label = { Text("4-digit Passcode") },
+                    label = { Text(stringResource(R.string.join_passcode_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Purple)
                 )
                 Spacer(Modifier.size(18.dp))
-                GoldButton("JOIN BATTLE", { onJoin(code, passcode) }, enabled = !busy && code.length == 6 && passcode.length == 4)
+                GoldButton(stringResource(R.string.join_button), { onJoin(code, passcode) }, enabled = !busy && code.length == 6 && passcode.length == 4)
             }
             Spacer(Modifier.weight(.65f))
         }

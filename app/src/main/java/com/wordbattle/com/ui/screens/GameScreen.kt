@@ -34,21 +34,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.wordbattle.com.R
 import com.wordbattle.com.data.model.Cell
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.components.LetterTile
 import com.wordbattle.com.ui.components.PlayerScoreCard
-import com.wordbattle.com.ui.theme.Blue
 import com.wordbattle.com.ui.theme.Gold
 import com.wordbattle.com.ui.theme.Ink
-import com.wordbattle.com.ui.theme.Mist
 import com.wordbattle.com.ui.theme.Muted
 import com.wordbattle.com.ui.theme.Purple
 import com.wordbattle.com.ui.theme.PurpleDark
-import com.wordbattle.com.ui.theme.Teal
 
 @Composable
 fun GameScreen(
@@ -63,23 +62,28 @@ fun GameScreen(
 ) {
     GradientBackground {
         if (game == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Loading battle…", color = Color.White) }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.game_loading), color = Color.White) }
             return@GradientBackground
         }
         val current = game.players.firstOrNull { it.id == game.currentTurnPlayerId }
         val canPlay = game.currentTurnPlayerId in ownedPlayerIds
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onExit) { Icon(Icons.Default.Close, "Leave game", tint = Color.White) }
+                IconButton(onClick = onExit) { Icon(Icons.Default.Close, stringResource(R.string.action_leave_game), tint = Color.White) }
                 Column(Modifier.weight(1f)) {
-                    Text("WORD BATTLE", color = Color.White, style = MaterialTheme.typography.titleLarge)
-                    Text(if (canPlay) "Your move, ${current?.name}" else "Waiting for ${current?.name}", color = if (canPlay) Gold else Color.White.copy(alpha = .72f))
+                    Text(stringResource(R.string.game_title), color = Color.White, style = MaterialTheme.typography.titleLarge)
+                    val currentName = current?.name ?: stringResource(R.string.game_waiting_for_player)
+                    Text(
+                        if (canPlay) stringResource(R.string.game_your_move, currentName)
+                        else stringResource(R.string.game_waiting_for, currentName),
+                        color = if (canPlay) Gold else Color.White.copy(alpha = .72f)
+                    )
                 }
                 Surface(shape = CircleShape, color = if (turnSeconds <= 10) Color(0xFFFF4E4E) else PurpleDark.copy(alpha = .7f)) {
                     Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Timer, null, tint = Color.White, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.size(5.dp))
-                        Text("${turnSeconds}s", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.game_timer_seconds, turnSeconds), color = Color.White, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -118,15 +122,25 @@ fun GameScreen(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         when {
-                            !canPlay -> "WAITING"
-                            selectedLetter == null -> "PICK A LETTER"
-                            else -> "PLACE $selectedLetter ON THE BOARD"
+                            !canPlay -> stringResource(R.string.game_status_waiting)
+                            selectedLetter == null -> stringResource(R.string.game_status_pick)
+                            else -> stringResource(R.string.game_status_place, selectedLetter.toString())
                         },
                         color = if (canPlay) Gold else Muted,
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = onSkip, enabled = canPlay) { Text("Skip", color = if (canPlay) Color.White else Muted) }
+                    TextButton(onClick = onSkip, enabled = canPlay) {
+                        Text(stringResource(R.string.action_skip), color = if (canPlay) Color.White else Muted)
+                    }
+                }
+                if (!canPlay) {
+                    Text(
+                        stringResource(R.string.game_read_only),
+                        color = Color.White.copy(alpha = .72f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
                 }
                 LazyRow(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 13.dp, vertical = 4.dp),

@@ -6,6 +6,7 @@ import com.wordbattle.com.data.model.BoardState
 import com.wordbattle.com.data.model.GameMode
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.data.model.GameStatus
+import com.wordbattle.com.data.model.PlacementOutcome
 import com.wordbattle.com.data.model.Player
 import com.wordbattle.com.data.model.PlayerType
 import com.wordbattle.com.data.model.UsedWord
@@ -15,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GameRepositoryTest {
-    private val dictionary = WordDictionary.fromWords(listOf("AT", "CAT", "MAN"))
+    private val dictionary = WordDictionary.fromWords(listOf("AT", "CAT", "MAN", "MAT"))
     private val repository = GameRepository(dictionary)
     private val players = listOf(
         Player("p1", "One", PlayerType.HUMAN_LOCAL, turnOrder = 0),
@@ -23,19 +24,72 @@ class GameRepositoryTest {
     )
 
     @Test
-    fun `used words are case insensitive and remain on board for zero points`() {
+    fun `placing a letter always pays one point`() {
+        val game = repository.newGame(GameMode.LOCAL, players = players)
+        val result = repository.placeLetter(game, "p1", 1, 1, 'A').getOrThrow()
+        assertEquals(GameRepository.POINTS_PER_LETTER, result.pointsAwarded)
+        assertEquals(PlacementOutcome.LETTER_PLACED, result.outcome)
+        assertEquals("p2", result.gameState.currentTurnPlayerId)
+    }
+
+    @Test
+    fun `completing a word pays one point per letter of the word plus the placed letter`() {
         var board = BoardState.empty(5, 5)
         board = requireNotNull(WordEngine.place(board, 2, 0, 'C', "p2"))
         board = requireNotNull(WordEngine.place(board, 2, 1, 'A', "p2"))
+        val game = GameState("g", GameMode.LOCAL, 100, board, players, currentTurnPlayerId = "p1")
+
+        val result = repository.placeLetter(game, "p1", 2, 2, 't').getOrThrow()
+        assertEquals(listOf("CAT"), result.newWords)
+        assertEquals(1 + 3, result.pointsAwarded)
+        assertEquals(PlacementOutcome.SCORED, result.outcome)
+    }
+
+    @Test
+    fun `a word hidden inside a longer run of letters still scores`() {
+        var board = BoardState.empty(5, 12)
+        "PLSHBDOCA".forEachIndexed { index, letter ->
+            board = requireNotNull(WordEngine.place(board, 2, index, letter, "p2"))
+        }
+        val game = GameState("g", GameMode.LOCAL, 100, board, players, currentTurnPlayerId = "p1")
+
+        val result = repository.placeLetter(game, "p1", 2, 9, 'T').getOrThrow()
+        assertEquals(listOf("CAT"), result.newWords)
+        assertEquals(1 + 3, result.pointsAwarded)
+    }
+
+    @Test
+    fun `both axes can score on the same placement`() {
+        var board = BoardState.empty(5, 5)
+        board = requireNotNull(WordEngine.place(board, 2, 1, 'C', "p2"))
+        board = requireNotNull(WordEngine.place(board, 2, 3, 'T', "p2"))
+        board = requireNotNull(WordEngine.place(board, 1, 2, 'M', "p2"))
+        board = requireNotNull(WordEngine.place(board, 3, 2, 'N', "p2"))
+        val game = GameState("g", GameMode.LOCAL, 100, board, players, currentTurnPlayerId = "p1")
+
+        val result = repository.placeLetter(game, "p1", 2, 2, 'A').getOrThrow()
+        assertEquals(listOf("CAT", "MAN"), result.newWords)
+        assertEquals(1 + 3 + 3, result.pointsAwarded)
+    }
+
+    @Test
+    fun `used words are case insensitive and only pay the letter point`() {
+        var board = BoardState.empty(5, 5)
+        board = requireNotNull(WordEngine.place(board, 2, 0, 'M', "p2"))
+        board = requireNotNull(WordEngine.place(board, 2, 1, 'A', "p2"))
         val game = GameState(
             "g", GameMode.LOCAL, 100, board, players,
-            usedWords = listOf(UsedWord("cat", "p2", listOf(BoardCoordinate(0, 0)))),
+            usedWords = listOf(
+                UsedWord("mat", "p2", listOf(BoardCoordinate(0, 0))),
+                UsedWord("at", "p2", listOf(BoardCoordinate(0, 1)))
+            ),
             currentTurnPlayerId = "p1"
         )
 
         val result = repository.placeLetter(game, "p1", 2, 2, 't').getOrThrow()
-        assertEquals(0, result.pointsAwarded)
-        assertEquals(listOf("CAT"), result.repeatedWords)
+        assertEquals(GameRepository.POINTS_PER_LETTER, result.pointsAwarded)
+        assertEquals(listOf("MAT"), result.repeatedWords)
+        assertEquals(PlacementOutcome.REPEATED_WORD, result.outcome)
         assertEquals('T', result.gameState.board.cell(2, 2)?.letter)
     }
 
@@ -49,14 +103,6 @@ class GameRepositoryTest {
         assertEquals(GameStatus.FINISHED, result.status)
         assertEquals(1, result.players.first { it.id == "p1" }.rank)
         assertEquals(2, result.players.first { it.id == "p2" }.rank)
-    }
-
-    @Test
-    fun `one-letter placement advances turn without scoring`() {
-        val game = repository.newGame(GameMode.LOCAL, players = players)
-        val result = repository.placeLetter(game, "p1", 1, 1, 'A').getOrThrow()
-        assertEquals(0, result.pointsAwarded)
-        assertEquals("p2", result.gameState.currentTurnPlayerId)
     }
 
     @Test

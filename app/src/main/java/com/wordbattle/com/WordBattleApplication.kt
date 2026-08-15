@@ -1,7 +1,9 @@
 package com.wordbattle.com
 
 import android.app.Application
+import com.wordbattle.com.data.audio.SoundManager
 import com.wordbattle.com.data.local.AppDatabase
+import com.wordbattle.com.data.network.NetworkConnectivityObserver
 import com.wordbattle.com.data.remote.SupabaseClientProvider
 import com.wordbattle.com.data.repository.AuthRepository
 import com.wordbattle.com.data.repository.RoomRepository
@@ -10,6 +12,12 @@ import kotlinx.serialization.json.Json
 
 class WordBattleApplication : Application() {
     val container: AppContainer by lazy { AppContainer(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Start listening immediately so the first screen already knows whether we are online.
+        container.network.start()
+    }
 }
 
 class AppContainer(application: Application) {
@@ -23,4 +31,10 @@ class AppContainer(application: Application) {
     val userRepository = UserRepository(supabase, database.profileDao(), json)
     val authRepository = AuthRepository(supabase, userRepository)
     val roomRepository = RoomRepository(supabase, database.roomCacheDao(), json)
+
+    /** Single source of truth for internet availability, shared by every screen. */
+    val network = NetworkConnectivityObserver(application)
+
+    /** Effects + looping battle theme; survives configuration changes with the container. */
+    val sound = SoundManager(application)
 }

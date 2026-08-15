@@ -1,3 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Word Battle</string>
+
+    <!-- Common actions -->
+    <string name="action_back">Back</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_network_settings">Network settings</string>
+    <string name="action_change">Change</string>
+    <string name="action_logout">Logout</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_skip">Skip</string>
+    <string name="action_add">Add</string>
+    <string name="action_accept">Accept</string>
+    <string name="action_sent">Sent</string>
+    <string name="action_invite">Invite</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_share_room">Share room</string>
+    <string name="action_leave_game">Leave game</string>
+    <string name="action_not_now">Not now</string>
+
+    <!-- Splash / branding -->
+    <string name="brand_word">WORD</string>
+    <string name="brand_battle">BATTLE</string>
+    <string name="brand_tagline">Build words. Win battles.</string>
+
+    <!-- Login -->
+    <string name="login_ready">Ready to play?</string>
+    <string name="login_subtitle">Sign in to battle friends and climb the ranks.</string>
+    <string name="login_google">Continue with Google</string>
+    <string name="login_or">or</string>
+    <string name="login_email_show">Use email instead</string>
+    <string name="login_email_hide">Hide email sign-in</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_email_continue">Continue with email</string>
+    <string name="login_email_note">New here? We create your account automatically.</string>
+    <string name="login_play_offline">Play offline as guest</string>
+    <string name="login_offline_note">Computer and pass-and-play modes work without a network.</string>
+
+    <!-- Tabs -->
+    <string name="tab_home">Home</string>
+    <string name="tab_rank">Rank</string>
+    <string name="tab_friends">Friends</string>
+    <string name="tab_profile">Profile</string>
+
+    <!-- Home -->
+    <string name="home_weekly_quest">WEEKLY QUEST</string>
+    <string name="home_hero_title">Spell. Score. Conquer!</string>
+    <string name="home_hero_subtitle">Earn double coins in your next battle</string>
+    <string name="home_choose_battle">Choose your battle</string>
+    <string name="home_greeting">Hi, %1$s!</string>
+    <string name="home_level">LEVEL %1$d</string>
+    <string name="home_offline_badge">Offline</string>
+    <string name="home_choose_battle_hint">Pick a mode, then start the battle.</string>
+    <string name="home_play_mode">Play %1$s</string>
+    <string name="home_mode_selected">Selected mode</string>
+    <string name="home_stat_wins">Wins</string>
+    <string name="home_stat_battles">Battles</string>
+    <string name="home_stat_weekly">This week</string>
+    <string name="home_join_room_hint">Enter a room code</string>
+    <string name="home_create_room_hint">Host a new battle</string>
+    <string name="home_tip_title">How scoring works</string>
+    <string name="home_tip_body">Every letter you place scores 1 point. Build a valid word and you also earn 1 point for each of its letters. First to 100 wins.</string>
+    <string name="home_play_now">PLAY NOW</string>
+    <string name="home_join_room">Join Room</string>
+    <string name="home_create_room">Create Room</string>
+    <string name="mode_computer_title">Computer</string>
+    <string name="mode_computer_subtitle">Offline solo</string>
+    <string name="mode_two_title">2 Players</string>
+    <string name="mode_two_subtitle">Head to head</string>
+    <string name="mode_three_title">3 Players</string>
+    <string name="mode_three_subtitle">Triple threat</string>
+    <string name="mode_four_title">4 Players</string>
+    <string name="mode_four_subtitle">Party battle</string>
+
+    <!-- Rank -->
+    <string name="rank_title">Leaderboard</string>
+    <string name="rank_subtitle">The sharpest word warriors</string>
+    <string name="rank_weekly">Weekly</string>
+    <string name="rank_all_time">All-Time</string>
+    <string name="rank_empty_title">No rankings yet</string>
+    <string name="rank_empty_body">Play a match or check your connection.</string>
+    <string name="rank_level_wins">Level %1$d • %2$d wins</string>
+
+    <!-- Friends -->
+    <string name="friends_title">Friends</string>
+    <string name="friends_subtitle">Find players and start a battle</string>
+    <string name="friends_search_hint">Search by username…</string>
+    <string name="friends_search_hint_offline">Sign in to search</string>
+    <string name="friends_players">Players</string>
+    <string name="friends_your_friends">Your friends</string>
+    <string name="friends_tap_to_connect">Tap to connect</string>
+    <string name="friends_status_incoming">Wants to be your friend</string>
+    <string name="friends_status_outgoing">Friend request sent</string>
+    <string name="friends_status_online">Online</string>
+    <string name="friends_status_offline">Offline</string>
+    <string name="friends_empty_title">Build your squad</string>
+    <string name="friends_empty_body">Search by username to send a request.</string>
+    <string name="friends_empty_body_offline">Sign in to add and invite friends.</string>
+    <string name="username_handle">\@%1$s</string>
+
+    <!-- Profile -->
+    <string name="profile_default_name">Word Player</string>
+    <string name="profile_guest_name">Guest Player</string>
+    <string name="profile_offline_guest">Offline Guest</string>
+    <string name="profile_level_warrior">Level %1$d Word Warrior</string>
+    <string name="profile_stat_games">Games</string>
+    <string name="profile_stat_wins">Wins</string>
+    <string name="profile_stat_win_rate">Win rate</string>
+    <string name="profile_settings">Settings</string>
+    <string name="setting_identity">Name &amp; username</string>
+    <string name="setting_identity_subtitle_none">Pick your unique username</string>
+    <string name="setting_sound">Sound</string>
+    <string name="setting_sound_subtitle">Game effects and feedback</string>
+    <string name="setting_notifications">Notifications</string>
+    <string name="setting_notifications_subtitle">Invites and match updates</string>
+    <string name="setting_language">Language</string>
+    <string name="setting_logout">Logout</string>
+    <string name="setting_exit_guest">Exit guest mode</string>
+    <string name="setting_logout_subtitle">See you next battle</string>
+    <string name="language_english">English</string>
+    <string name="language_bangla">বাংলা</string>
+
+    <!-- Identity (first login / edit) -->
+    <string name="identity_title">Choose your identity</string>
+    <string name="identity_subtitle">Your display name is shown in battles. Your username is unique and used by friend search.</string>
+    <string name="identity_display_name_label">Display name</string>
+    <string name="identity_username_label">Username</string>
+    <string name="identity_display_name_helper">3–20 characters.</string>
+    <string name="identity_username_helper">3–20 characters: lowercase letters, numbers and underscore.</string>
+    <string name="identity_save">SAVE AND CONTINUE</string>
+    <string name="identity_cooldown_note">You can change your display name again in %1$d day(s).</string>
+    <string name="identity_cooldown_ready">You can change your display name now.</string>
+    <string name="identity_error_name_short">Display name needs at least 3 characters.</string>
+    <string name="identity_error_name_long">Display name can be at most 20 characters.</string>
+    <string name="identity_error_username_short">Username needs at least 3 characters.</string>
+    <string name="identity_error_username_long">Username can be at most 20 characters.</string>
+    <string name="identity_error_username_chars">Use only lowercase letters, numbers and underscore.</string>
+
+    <!-- Assignment -->
+    <string name="assignment_title">Who\'s playing?</string>
+    <string name="assignment_subtitle">Choose local or online for each seat</string>
+    <string name="assignment_you_host">You • Host</string>
+    <string name="assignment_player">Player %1$d</string>
+    <string name="assignment_host_device">Host device</string>
+    <string name="assignment_joins_with_code">Joins with room code</string>
+    <string name="assignment_pass_and_play">Pass-and-play</string>
+    <string name="assignment_local_badge">LOCAL</string>
+    <string name="assignment_chip_local">Local</string>
+    <string name="assignment_chip_online">Online</string>
+    <string name="assignment_start_local">START LOCAL GAME</string>
+    <string name="assignment_create_room">CREATE ONLINE ROOM</string>
+    <string name="assignment_note_local">No network needed — pass the device on each turn.</string>
+    <string name="assignment_note_online">Online seats join live; local seats share the host device.</string>
+
+    <!-- Room setup -->
+    <string name="room_title">Battle Room</string>
+    <string name="room_subtitle">Invite players and get ready</string>
+    <string name="room_creating">Creating your room…</string>
+    <string name="room_code_label">ROOM CODE</string>
+    <string name="room_passcode">Passcode • %1$s</string>
+    <string name="room_players">Players %1$d/%2$d</string>
+    <string name="room_start_battle">START BATTLE</string>
+    <string name="room_waiting_note">Waiting for every online player to join and tap Ready…</string>
+    <string name="room_share_title">Share battle room</string>
+    <string name="room_share_message">Join my Word Battle! Room: %1$s • Passcode: %2$s</string>
+
+    <!-- Slots -->
+    <string name="slot_waiting">Waiting for player…</string>
+    <string name="slot_local">Local • Host device</string>
+    <string name="slot_online_seat">Online seat %1$d</string>
+    <string name="slot_ready">READY</string>
+    <string name="slot_open">OPEN</string>
+    <string name="slot_not_ready">NOT READY</string>
+
+    <!-- Join room -->
+    <string name="join_title">Join a Room</string>
+    <string name="join_card_title">Enter battle details</string>
+    <string name="join_card_subtitle">Ask the host for both codes.</string>
+    <string name="join_code_label">6-character Room Code</string>
+    <string name="join_passcode_label">4-digit Passcode</string>
+    <string name="join_button">JOIN BATTLE</string>
+
+    <!-- Lobby -->
+    <string name="lobby_title">Room Lobby</string>
+    <string name="lobby_subtitle">Host will start when everyone is ready</string>
+    <string name="lobby_code">Code  %1$s</string>
+    <string name="lobby_code_placeholder">——</string>
+    <string name="lobby_ready_done">I\'M READY ✓</string>
+    <string name="lobby_ready_up">READY UP</string>
+    <string name="lobby_note_ready">Ready! Waiting for the host…</string>
+    <string name="lobby_note_tap">Tap when you\'re ready to battle.</string>
+
+    <!-- Game -->
+    <string name="game_loading">Loading battle…</string>
+    <string name="game_you">You</string>
+    <string name="game_title">WORD BATTLE</string>
+    <string name="game_your_move">Your move, %1$s</string>
+    <string name="game_waiting_for">Waiting for %1$s</string>
+    <string name="game_waiting_for_player">Waiting for player</string>
+    <string name="game_timer_seconds">%1$ds</string>
+    <string name="game_status_waiting">WAITING</string>
+    <string name="game_status_pick">PICK A LETTER</string>
+    <string name="game_status_place">PLACE %1$s ON THE BOARD</string>
+    <string name="game_read_only">Read-only — it is not your turn</string>
+
+    <!-- Results -->
+    <string name="results_you_win">YOU WIN!</string>
+    <string name="results_win_subtitle">Champion of the board</string>
+    <string name="results_title">BATTLE COMPLETE!</string>
+    <string name="results_subtitle">What a word showdown</string>
+    <string name="results_winner">WINNER</string>
+    <string name="results_points">%1$d points</string>
+    <string name="results_play_again">PLAY AGAIN</string>
+    <string name="results_home">Back to Home</string>
+    <string name="results_rank">#%1$d</string>
+
+    <!-- Connectivity -->
+    <string name="offline_dialog_title">No internet connection</string>
+    <string name="offline_dialog_body">This action needs internet. Check your Wi-Fi or mobile data and try again. Computer and pass-and-play modes still work offline.</string>
+    <string name="banner_reconnecting">Connection lost — reconnecting…</string>
+    <string name="banner_offline">You are offline</string>
+    <string name="toast_back_online">Back online — syncing…</string>
+
+    <!-- Toasts -->
+    <string name="toast_welcome">Welcome, %1$s!</string>
+    <string name="toast_offline_ready">Offline mode ready</string>
+    <string name="toast_sign_in_online_room">Sign in to create an online room</string>
+    <string name="toast_sign_in_join">Sign in to join online rooms</string>
+    <string name="toast_sign_in_create">Sign in to create online rooms</string>
+    <string name="toast_pick_letter_first">Pick a letter first</string>
+    <string name="toast_move_rejected">Move rejected</string>
+    <string name="toast_turn_skipped">Turn skipped</string>
+    <string name="toast_bot_move">Word Bot: %1$s</string>
+    <string name="toast_move_saved_locally">Move saved locally; reconnecting…</string>
+    <string name="toast_lobby_connection_lost">Lobby connection lost</string>
+    <string name="toast_game_connection_lost">Game connection lost</string>
+    <string name="toast_friend_request_sent">Friend request sent</string>
+    <string name="toast_friend_added">Friend added</string>
+    <string name="toast_invite_hint">Create the room, then share its code with %1$s</string>
+    <string name="toast_rematch_new_room">Create a fresh room for the rematch</string>
+    <string name="toast_something_wrong">Something went wrong</string>
+    <string name="toast_profile_saved">Profile updated</string>
+
+    <!-- Placement feedback -->
+    <string name="placement_scored">+%1$d! New word: %2$s</string>
+    <string name="placement_repeated">+%1$d · word already used ⚠️</string>
+    <string name="placement_no_word">+%1$d · no new word</string>
+    <string name="placement_letter_placed">+%1$d point</string>
+
+    <!-- Error codes -->
+    <string name="error_no_internet">No internet connection. Reconnect and try again.</string>
+    <string name="error_not_signed_in">You are signed out. Please sign in again.</string>
+    <string name="error_profile_missing">Your player profile is missing. Sign out and sign in again.</string>
+    <string name="error_supabase_misconfigured">The server is not configured. Add the Supabase URL and publishable key.</string>
+    <string name="error_invalid_slots">Invalid player setup. Keep 1–3 local seats and at least 1 online seat.</string>
+    <string name="error_room_code_unavailable">Could not reserve a free room code. Please try again.</string>
+    <string name="error_room_create_denied">The server refused to create the room. Run the latest Supabase SQL policies.</string>
+    <string name="error_room_create_failed">Could not create the room. Please try again.</string>
+    <string name="error_room_slots_failed">Could not create player seats, so the room was cancelled.</string>
+    <string name="error_room_not_found">Room not found. Check the code and passcode.</string>
+    <string name="error_room_full">This room is already full.</string>
+    <string name="error_room_already_started">This battle has already started.</string>
+    <string name="error_room_join_denied">You could not be seated in this room.</string>
+    <string name="error_not_host">Only the host can start the battle.</string>
+    <string name="error_lobby_not_ready">Everyone must join and tap Ready first.</string>
+    <string name="error_username_taken">That username is already taken.</string>
+    <string name="error_username_invalid">Use 3–20 lowercase letters, numbers or underscore.</string>
+    <string name="error_display_name_invalid">Display name must be 3–20 characters.</string>
+    <string name="error_display_name_cooldown">You can change your display name only once every 10 days.</string>
+        <string name="error_game_not_in_progress">This battle is not running.</string>
+    <string name="error_not_your_turn">Wait for your turn.</string>
+    <string name="error_turn_already_advanced">The turn has already advanced.</string>
+    <string name="error_unknown">Something went wrong. Please try again.</string>
 </resources>

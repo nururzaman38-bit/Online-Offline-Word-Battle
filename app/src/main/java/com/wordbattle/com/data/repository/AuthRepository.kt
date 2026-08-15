@@ -63,6 +63,33 @@ class AuthRepository(
         return users.ensureProfile(UserProfile(uid, email.substringBefore('@').ifBlank { "Word Player" }))
     }
 
+    /**
+     * Single email entry point used by the redesigned login screen.
+     *
+     * There is no Login/Register toggle any more: we try to sign in first and only create the
+     * account when Supabase says the credentials do not belong to an existing user.
+     */
+    suspend fun signInOrSignUpWithEmail(email: String, password: String): UserProfile {
+        require(email.isNotBlank() && password.length >= 6) { "Enter a valid email and a 6+ character password" }
+        return runCatching { signInWithEmail(email, password) }.getOrElse { failure ->
+            if (!looksLikeMissingAccount(failure)) throw failure
+            signUpWithEmail(email, password)
+        }
+    }
+
+    /** Distinguishes "no such account" from a wrong password or a network failure. */
+    private fun looksLikeMissingAccount(error: Throwable): Boolean {
+        val text = generateSequence(error) { it.cause }.take(5)
+            .joinToString(" ") { "${it.message.orEmpty()} ${it::class.simpleName.orEmpty()}" }
+            .lowercase()
+        if (SupabaseErrorClassifierBridge.isNetwork(text)) return false
+        return text.contains("invalid login credentials") ||
+            text.contains("invalid_credentials") ||
+            text.contains("user not found") ||
+            text.contains("email not found") ||
+            text.contains("400")
+    }
+
     suspend fun signUpWithEmail(email: String, password: String): UserProfile {
         require(email.isNotBlank() && password.length >= 6) { "Enter a valid email and a 6+ character password" }
         client.auth.signUpWith(Email) { this.email = email.trim(); this.password = password }
@@ -73,4 +100,10 @@ class AuthRepository(
     }
 
     suspend fun signOut() = client.auth.signOut()
+}
+
+/** Thin alias so [AuthRepository] can reuse the shared network heuristics. */
+private object SupabaseErrorClassifierBridge {
+    fun isNetwork(text: String): Boolean =
+        com.wordbattle.com.data.model.SupabaseErrorClassifier.isNetwork(text)
 }

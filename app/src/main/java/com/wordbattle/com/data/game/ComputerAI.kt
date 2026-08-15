@@ -22,9 +22,7 @@ class ComputerAI(
                 val simulated = WordEngine.place(
                     game.board, coordinate.row, coordinate.col, letter, game.currentTurnPlayerId
                 ) ?: continue
-                val score = WordEngine.findCandidateWords(simulated, coordinate.row, coordinate.col)
-                    .filter { dictionary.isValidWord(it.word) && it.word !in used }
-                    .sumOf { it.word.length }
+                val score = moveScore(simulated, coordinate.row, coordinate.col, used)
                 if (score > (best?.score ?: 0)) {
                     best = AiMove(coordinate.row, coordinate.col, letter, score)
                 }
@@ -34,7 +32,25 @@ class ComputerAI(
 
         val fallbackCell = candidates.take(adjacentCandidateCount(game).coerceAtLeast(1)).random(random)
         val commonLetters = charArrayOf('E', 'A', 'O', 'I', 'N')
-        return AiMove(fallbackCell.row, fallbackCell.col, commonLetters.random(random), 0)
+        return AiMove(fallbackCell.row, fallbackCell.col, commonLetters.random(random), POINTS_PER_LETTER)
+    }
+
+    /**
+     * Mirrors `GameRepository.placeLetter`: one point for the letter itself, plus the longest
+     * unused dictionary word running through the new cell on each axis.
+     */
+    private fun moveScore(board: com.wordbattle.com.data.model.BoardState, row: Int, col: Int, used: Set<String>): Int {
+        var score = POINTS_PER_LETTER
+        val claimed = used.toMutableSet()
+        WordAxis.entries.forEach { axis ->
+            val word = WordEngine.segments(board, row, col, axis)
+                .firstOrNull { dictionary.isValidWord(it.word) && it.word.uppercase() !in claimed }
+            if (word != null) {
+                score += word.word.length
+                claimed += word.word.uppercase()
+            }
+        }
+        return score
     }
 
     private fun orderedEmptyCells(game: GameState): List<BoardCoordinate> {
@@ -55,4 +71,8 @@ class ComputerAI(
     private fun hasFilledNeighbor(game: GameState, row: Int, col: Int): Boolean =
         listOf(row - 1 to col, row + 1 to col, row to col - 1, row to col + 1)
             .any { (r, c) -> game.board.cell(r, c)?.letter != null }
+
+    companion object {
+        private const val POINTS_PER_LETTER = 1
+    }
 }

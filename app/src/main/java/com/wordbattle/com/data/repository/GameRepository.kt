@@ -1,6 +1,7 @@
 package com.wordbattle.com.data.repository
 
 import com.wordbattle.com.data.dictionary.WordDictionary
+import com.wordbattle.com.data.game.WordAxis
 import com.wordbattle.com.data.game.WordEngine
 import com.wordbattle.com.data.local.CachedGameEntity
 import com.wordbattle.com.data.local.GameDao
@@ -8,6 +9,9 @@ import com.wordbattle.com.data.model.BoardState
 import com.wordbattle.com.data.model.GameMode
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.data.model.GameStatus
+import com.wordbattle.com.data.model.AppErrorCode
+import com.wordbattle.com.data.model.AppException
+import com.wordbattle.com.data.model.PlacementOutcome
 import com.wordbattle.com.data.model.PlacementResult
 import com.wordbattle.com.data.model.Player
 import com.wordbattle.com.data.model.PlayerType
@@ -69,31 +73,50 @@ class GameRepository(
     }
 
     fun placeLetter(game: GameState, playerId: String, row: Int, col: Int, letter: Char): Result<PlacementResult> {
-        if (game.status != GameStatus.IN_PROGRESS) return Result.failure(IllegalStateException("Game is not in progress"))
-        if (game.currentTurnPlayerId != playerId) return Result.failure(IllegalStateException("Wait for your turn"))
+        if (game.status != GameStatus.IN_PROGRESS) {
+            return Result.failure(AppException(AppErrorCode.GAME_NOT_IN_PROGRESS))
+        }
+        if (game.currentTurnPlayerId != playerId) {
+            return Result.failure(AppException(AppErrorCode.NOT_YOUR_TURN))
+        }
         if (game.board.cell(row, col) == null) return Result.failure(IllegalArgumentException("Cell is outside the board"))
         if (game.board.cell(row, col)?.letter != null) return Result.failure(IllegalArgumentException("That cell is already filled"))
         if (!letter.isLetter()) return Result.failure(IllegalArgumentException("Choose a letter A–Z"))
 
         val board = WordEngine.place(game.board, row, col, letter, playerId)
             ?: return Result.failure(IllegalArgumentException("Unable to place letter"))
-        val candidates = WordEngine.findCandidateWords(board, row, col)
         val alreadyUsed = game.usedWords.map { it.word.uppercase(Locale.ROOT) }.toMutableSet()
         val newWords = mutableListOf<String>()
         val repeatedWords = mutableListOf<String>()
         val invalidWords = mutableListOf<String>()
         val additions = mutableListOf<UsedWord>()
-        var points = 0
 
-        candidates.forEach { candidate ->
+        // Every letter placed on the board is worth one point, word or no word.
+        var points = POINTS_PER_LETTER
+
+        // One word may be claimed per axis. Inside an axis the longest dictionary word that runs
+        // through the new cell wins, so placing T after "…BDOCA" scores CAT and not AT.
+        WordAxis.entries.forEach { axis ->
+            val segments = WordEngine.segments(board, row, col, axis)
+            val scored = segments.firstOrNull {
+                dictionary.isValidWord(it.word) && it.word.uppercase(Locale.ROOT) !in alreadyUsed
+            }
             when {
-                !dictionary.isValidWord(candidate.word) -> invalidWords += candidate.word
-                candidate.word.uppercase(Locale.ROOT) in alreadyUsed -> repeatedWords += candidate.word
+                scored != null -> {
+                    val word = scored.word.uppercase(Locale.ROOT)
+                    points += word.length
+                    newWords += word
+                    alreadyUsed += word
+                    additions += UsedWord(word, playerId, scored.cells)
+                }
                 else -> {
-                    points += candidate.word.length
-                    newWords += candidate.word
-                    alreadyUsed += candidate.word.uppercase(Locale.ROOT)
-                    additions += UsedWord(candidate.word.uppercase(Locale.ROOT), playerId, candidate.cells)
+                    val repeated = segments.firstOrNull { dictionary.isValidWord(it.word) }
+                    if (repeated != null) {
+                        repeatedWords += repeated.word.uppercase(Locale.ROOT)
+                    } else {
+                        // Only report the full run as "not a word" so the toast stays readable.
+                        segments.firstOrNull()?.let { invalidWords += it.word.uppercase(Locale.ROOT) }
+                    }
                 }
             }
         }
@@ -127,23 +150,23 @@ class GameRepository(
             status = status,
             rankingsAssigned = rankings
         )
-        val message = when {
-            newWords.isNotEmpty() -> "+$points! New word: ${newWords.joinToString(" + ")}"
-            repeatedWords.isNotEmpty() -> "This Word Already Used ⚠️"
-            invalidWords.isNotEmpty() -> "No dictionary word formed"
-            else -> "Letter placed"
+        val outcome = when {
+            newWords.isNotEmpty() -> PlacementOutcome.SCORED
+            repeatedWords.isNotEmpty() -> PlacementOutcome.REPEATED_WORD
+            invalidWords.isNotEmpty() -> PlacementOutcome.NO_WORD
+            else -> PlacementOutcome.LETTER_PLACED
         }
         return Result.success(
-            PlacementResult(updated, points, newWords, repeatedWords, invalidWords, message)
+            PlacementResult(updated, points, newWords, repeatedWords, invalidWords, outcome)
         )
     }
 
     fun skipTurn(game: GameState, playerId: String): Result<GameState> {
         if (game.status != GameStatus.IN_PROGRESS) {
-            return Result.failure(IllegalStateException("Game is not in progress"))
+            return Result.failure(AppException(AppErrorCode.GAME_NOT_IN_PROGRESS))
         }
         if (game.currentTurnPlayerId != playerId) {
-            return Result.failure(IllegalStateException("The turn has already advanced"))
+            return Result.failure(AppException(AppErrorCode.TURN_ALREADY_ADVANCED))
         }
         return Result.success(game.copy(currentTurnPlayerId = nextTurn(game.players, playerId)))
     }
@@ -164,5 +187,10 @@ class GameRepository(
             if (candidate.rank == null && candidate.isConnected) return candidate.id
         }
         return currentId
+    }
+
+    companion object {
+        /** Dropping a legal letter on the board always pays this much, word or no word. */
+        const val POINTS_PER_LETTER = 1
     }
 }

@@ -1,6 +1,5 @@
 package com.wordbattle.com.data.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -98,14 +97,21 @@ data class RoomSlot(
 data class UserProfile(
     val uid: String,
     val displayName: String,
+    /** Globally unique, lowercase handle used by friend search. Null until the user picks one. */
+    val username: String? = null,
     val photoUrl: String? = null,
     val coins: Int = 0,
     val gems: Int = 0,
     val level: Int = 1,
     val gamesPlayed: Int = 0,
     val wins: Int = 0,
-    val weeklyScore: Int = 0
-)
+    val weeklyScore: Int = 0,
+    /** ISO-8601 timestamp of the last display-name change, used for the 10 day cooldown. */
+    val displayNameUpdatedAt: String? = null
+) {
+    /** True once the user has completed the first-login identity screen. */
+    val hasIdentity: Boolean get() = !username.isNullOrBlank()
+}
 
 @Serializable
 data class FriendProfile(
@@ -114,18 +120,23 @@ data class FriendProfile(
     val isOnline: Boolean = false
 )
 
+/** What happened when a letter was dropped on the board. The UI turns this into localized text. */
+enum class PlacementOutcome { SCORED, REPEATED_WORD, NO_WORD, LETTER_PLACED }
+
 data class PlacementResult(
     val gameState: GameState,
     val pointsAwarded: Int,
     val newWords: List<String>,
     val repeatedWords: List<String>,
     val invalidWords: List<String>,
-    val message: String
+    val outcome: PlacementOutcome
 )
 
 data class AiMove(val row: Int, val col: Int, val letter: Char, val score: Int)
 
 sealed interface JoinRoomResult {
     data class Success(val room: Room) : JoinRoomResult
-    data class Error(val message: String) : JoinRoomResult
+
+    /** [code] is localized by the UI; [detail] is technical context for logs only. */
+    data class Error(val code: AppErrorCode, val detail: String? = null) : JoinRoomResult
 }

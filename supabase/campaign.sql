@@ -21,6 +21,18 @@ update public.profiles set lives_max = 3 where lives_max is null;
 update public.profiles set campaign_level = 1 where campaign_level is null;
 update public.profiles set campaign_stars_total = 0 where campaign_stars_total is null;
 
+-- games mode + status now include campaign (for future use, campaign offline but keep schema consistent)
+alter table public.games drop constraint if exists games_mode_check;
+alter table public.games drop constraint if exists games_status_check;
+do $$ begin
+  alter table public.games add constraint games_mode_check check (mode in ('computer','local','mixed_online','campaign_score','campaign_puzzle'));
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter table public.games add constraint games_status_check check (status in ('lobby','in_progress','finished','level_failed'));
+exception when duplicate_object then null;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- 2. campaign_progress
 -- ---------------------------------------------------------------------------

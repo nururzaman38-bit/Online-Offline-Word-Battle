@@ -23,7 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.wordbattle.com.R
 import com.wordbattle.com.data.model.Room
 import com.wordbattle.com.data.model.RoomSlot
 import com.wordbattle.com.ui.components.GoldButton
@@ -34,7 +36,6 @@ import com.wordbattle.com.ui.theme.Gold
 import com.wordbattle.com.ui.theme.Ink
 import com.wordbattle.com.ui.theme.Muted
 import com.wordbattle.com.ui.theme.Purple
-import com.wordbattle.com.ui.theme.Red
 import com.wordbattle.com.ui.theme.Teal
 
 @Composable
@@ -45,33 +46,35 @@ fun RoomSetupScreen(room: Room?, busy: Boolean, onStart: () -> Unit, onShare: (R
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
                 Column(Modifier.weight(1f)) {
-                    Text("Battle Room", color = Color.White, style = MaterialTheme.typography.headlineMedium)
-                    Text("Invite players and get ready", color = Color.White.copy(alpha = .7f))
+                    Text(stringResource(R.string.room_title), color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(R.string.room_subtitle), color = Color.White.copy(alpha = .7f))
                 }
-                if (room != null) IconButton(onClick = { onShare(room) }) { Icon(Icons.Default.Share, "Share room", tint = Gold) }
+                if (room != null) IconButton(onClick = { onShare(room) }) { Icon(Icons.Default.Share, stringResource(R.string.action_share_room), tint = Gold) }
             }
             if (room == null) {
-                WhiteCard(Modifier.fillMaxWidth()) { Text("Creating your room…", color = Ink) }
+                WhiteCard(Modifier.fillMaxWidth()) { Text(stringResource(R.string.room_creating), color = Ink) }
                 return@Column
             }
             WhiteCard(Modifier.fillMaxWidth()) {
-                Text("ROOM CODE", color = Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(stringResource(R.string.room_code_label), color = Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
                 Spacer(Modifier.size(8.dp))
                 Row(Modifier.align(Alignment.CenterHorizontally), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     room.roomCode.forEachIndexed { i, c -> LetterTile(c, size = 39.dp, rotationSeed = i) }
                 }
                 Spacer(Modifier.size(13.dp))
                 Surface(shape = CircleShape, color = Purple.copy(alpha = .09f), modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Passcode  •  ${room.passcode}", Modifier.padding(horizontal = 18.dp, vertical = 8.dp), color = Purple, style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.room_passcode, room.passcode), Modifier.padding(horizontal = 18.dp, vertical = 8.dp), color = Purple, style = MaterialTheme.typography.titleMedium)
                 }
             }
-            Text("Players  ${room.slots.count { it.filledByName != null }}/${room.totalSlots}", color = Color.White, style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.room_players, room.slots.count { it.filledByName != null }, room.totalSlots),
+                color = Color.White, style = MaterialTheme.typography.titleLarge)
             room.slots.sortedBy { it.slotIndex }.forEach { slot -> SlotCard(slot, isLocal = slot.slotIndex < room.localSlotsCount) }
             val canStart = room.slots.size == room.totalSlots && room.slots.all { it.filledByName != null && it.isReady }
-            GoldButton("START BATTLE", onStart, enabled = canStart && !busy)
-            if (!canStart) Text("Waiting for every online player to join and tap Ready…", color = Color.White.copy(alpha = .72f), modifier = Modifier.align(Alignment.CenterHorizontally))
+            GoldButton(stringResource(R.string.room_start_battle), onStart, enabled = canStart && !busy)
+            if (!canStart) Text(stringResource(R.string.room_waiting_note), color = Color.White.copy(alpha = .72f), modifier = Modifier.align(Alignment.CenterHorizontally))
         }
     }
 }
@@ -87,12 +90,21 @@ fun SlotCard(slot: RoomSlot, isLocal: Boolean) {
             }
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(slot.filledByName ?: "Waiting for player…", color = Ink, style = MaterialTheme.typography.titleMedium)
-                Text(if (isLocal) "Local • Host device" else "Online seat ${slot.slotIndex + 1}", color = Muted)
+                Text(slot.filledByName ?: stringResource(R.string.slot_waiting), color = Ink, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (isLocal) stringResource(R.string.slot_local) else stringResource(R.string.slot_online_seat, slot.slotIndex + 1),
+                    color = Muted
+                )
             }
             Surface(shape = CircleShape, color = when { slot.isReady -> Teal; slot.filledByName == null -> Color(0xFFF0EDF3); else -> Gold }) {
                 Text(
-                    when { slot.isReady -> "READY"; slot.filledByName == null -> "OPEN"; else -> "NOT READY" },
+                    stringResource(
+                        when {
+                            slot.isReady -> R.string.slot_ready
+                            slot.filledByName == null -> R.string.slot_open
+                            else -> R.string.slot_not_ready
+                        }
+                    ),
                     Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     color = if (slot.isReady) Color.White else if (slot.filledByName == null) Muted else Ink,
                     style = MaterialTheme.typography.labelMedium

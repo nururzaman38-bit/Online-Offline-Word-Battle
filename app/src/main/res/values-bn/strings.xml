@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ওয়ার্ড ব্যাটল</string>
+
+    <!-- Common actions -->
+    <string name="action_back">পেছনে</string>
+    <string name="action_retry">আবার চেষ্টা করুন</string>
+    <string name="action_network_settings">নেটওয়ার্ক সেটিংস</string>
+    <string name="action_change">পরিবর্তন</string>
+    <string name="action_logout">লগআউট</string>
+    <string name="action_cancel">বাতিল</string>
+    <string name="action_save">সংরক্ষণ</string>
+    <string name="action_skip">বাদ দিন</string>
+    <string name="action_add">যোগ করুন</string>
+    <string name="action_accept">গ্রহণ করুন</string>
+    <string name="action_sent">পাঠানো হয়েছে</string>
+    <string name="action_invite">আমন্ত্রণ</string>
+    <string name="action_settings">সেটিংস</string>
+    <string name="action_share_room">রুম শেয়ার করুন</string>
+    <string name="action_leave_game">খেলা ছাড়ুন</string>
+    <string name="action_not_now">এখন নয়</string>
+
+    <!-- Splash / branding -->
+    <string name="brand_word">ওয়ার্ড</string>
+    <string name="brand_battle">ব্যাটল</string>
+    <string name="brand_tagline">শব্দ গড়ুন। যুদ্ধ জিতুন।</string>
+
+    <!-- Login -->
+    <string name="login_ready">খেলতে প্রস্তুত?</string>
+    <string name="login_subtitle">সাইন ইন করে বন্ধুদের সাথে লড়ুন আর র‍্যাঙ্কে উঠুন।</string>
+    <string name="login_google">Google দিয়ে চালিয়ে যান</string>
+    <string name="login_or">অথবা</string>
+    <string name="login_email_show">ইমেইল দিয়ে চালিয়ে যান</string>
+    <string name="login_email_hide">ইমেইল সাইন-ইন লুকান</string>
+    <string name="login_email_label">ইমেইল</string>
+    <string name="login_password_label">পাসওয়ার্ড</string>
+    <string name="login_email_continue">ইমেইল দিয়ে চালিয়ে যান</string>
+    <string name="login_email_note">নতুন? আমরা স্বয়ংক্রিয়ভাবে আপনার অ্যাকাউন্ট তৈরি করে দেব।</string>
+    <string name="login_play_offline">গেস্ট হিসেবে অফলাইনে খেলুন</string>
+    <string name="login_offline_note">কম্পিউটার ও পাস-অ্যান্ড-প্লে মোড নেটওয়ার্ক ছাড়াই চলে।</string>
+
+    <!-- Tabs -->
+    <string name="tab_home">হোম</string>
+    <string name="tab_rank">র‍্যাঙ্ক</string>
+    <string name="tab_friends">বন্ধু</string>
+    <string name="tab_profile">প্রোফাইল</string>
+
+    <!-- Home -->
+    <string name="home_weekly_quest">সাপ্তাহিক চ্যালেঞ্জ</string>
+    <string name="home_hero_title">বানান করুন। স্কোর করুন। জিতুন!</string>
+    <string name="home_hero_subtitle">পরের ব্যাটলে দ্বিগুণ কয়েন জিতুন</string>
+    <string name="home_choose_battle">আপনার ব্যাটল বেছে নিন</string>
+    <string name="home_greeting">হ্যালো, %1$s!</string>
+    <string name="home_level">লেভেল %1$d</string>
+    <string name="home_offline_badge">অফলাইন</string>
+    <string name="home_choose_battle_hint">একটি মোড বেছে নিন, তারপর ব্যাটল শুরু করুন।</string>
+    <string name="home_play_mode">%1$s খেলুন</string>
+    <string name="home_mode_selected">নির্বাচিত মোড</string>
+    <string name="home_stat_wins">জয়</string>
+    <string name="home_stat_battles">ব্যাটল</string>
+    <string name="home_stat_weekly">এই সপ্তাহ</string>
+    <string name="home_join_room_hint">রুম কোড দিন</string>
+    <string name="home_create_room_hint">নতুন ব্যাটল হোস্ট করুন</string>
+    <string name="home_tip_title">স্কোর যেভাবে হয়</string>
+    <string name="home_tip_body">প্রতিটি অক্ষর বসালেই ১ পয়েন্ট। বৈধ শব্দ তৈরি হলে শব্দের প্রতিটি অক্ষরের জন্য আরও ১ পয়েন্ট করে যোগ হবে। প্রথমে ১০০ পয়েন্টে পৌঁছালেই জয়।</string>
+    <string name="home_play_now">এখনই খেলুন</string>
+    <string name="home_join_room">রুমে যোগ দিন</string>
+    <string name="home_create_room">রুম তৈরি করুন</string>
+    <string name="mode_computer_title">কম্পিউটার</string>
+    <string name="mode_computer_subtitle">অফলাইন একক খেলা</string>
+    <string name="mode_two_title">২ জন খেলোয়াড়</string>
+    <string name="mode_two_subtitle">মুখোমুখি লড়াই</string>
+    <string name="mode_three_title">৩ জন খেলোয়াড়</string>
+    <string name="mode_three_subtitle">তিনজনের টক্কর</string>
+    <string name="mode_four_title">৪ জন খেলোয়াড়</string>
+    <string name="mode_four_subtitle">দলগত ব্যাটল</string>
+
+    <!-- Rank -->
+    <string name="rank_title">লিডারবোর্ড</string>
+    <string name="rank_subtitle">সেরা শব্দযোদ্ধারা</string>
+    <string name="rank_weekly">সাপ্তাহিক</string>
+    <string name="rank_all_time">সর্বকালের</string>
+    <string name="rank_empty_title">এখনো কোনো র‍্যাঙ্ক নেই</string>
+    <string name="rank_empty_body">একটি ম্যাচ খেলুন অথবা ইন্টারনেট সংযোগ দেখুন।</string>
+    <string name="rank_level_wins">লেভেল %1$d • %2$d জয়</string>
+
+    <!-- Friends -->
+    <string name="friends_title">বন্ধু</string>
+    <string name="friends_subtitle">খেলোয়াড় খুঁজুন এবং ব্যাটল শুরু করুন</string>
+    <string name="friends_search_hint">ইউজারনেম দিয়ে খুঁজুন…</string>
+    <string name="friends_search_hint_offline">খুঁজতে সাইন ইন করুন</string>
+    <string name="friends_players">খেলোয়াড়</string>
+    <string name="friends_your_friends">আপনার বন্ধুরা</string>
+    <string name="friends_tap_to_connect">যুক্ত হতে চাপ দিন</string>
+    <string name="friends_status_incoming">আপনার বন্ধু হতে চায়</string>
+    <string name="friends_status_outgoing">বন্ধুত্বের অনুরোধ পাঠানো হয়েছে</string>
+    <string name="friends_status_online">অনলাইন</string>
+    <string name="friends_status_offline">অফলাইন</string>
+    <string name="friends_empty_title">নিজের দল গড়ুন</string>
+    <string name="friends_empty_body">অনুরোধ পাঠাতে ইউজারনেম দিয়ে খুঁজুন।</string>
+    <string name="friends_empty_body_offline">বন্ধু যোগ করতে ও আমন্ত্রণ জানাতে সাইন ইন করুন।</string>
+    <string name="username_handle">\@%1$s</string>
+
+    <!-- Profile -->
+    <string name="profile_default_name">ওয়ার্ড প্লেয়ার</string>
+    <string name="profile_guest_name">গেস্ট প্লেয়ার</string>
+    <string name="profile_offline_guest">অফলাইন গেস্ট</string>
+    <string name="profile_level_warrior">লেভেল %1$d শব্দযোদ্ধা</string>
+    <string name="profile_stat_games">খেলা</string>
+    <string name="profile_stat_wins">জয়</string>
+    <string name="profile_stat_win_rate">জয়ের হার</string>
+    <string name="profile_settings">সেটিংস</string>
+    <string name="setting_identity">নাম ও ইউজারনেম</string>
+    <string name="setting_identity_subtitle_none">আপনার অনন্য ইউজারনেম বেছে নিন</string>
+    <string name="setting_sound">সাউন্ড</string>
+    <string name="setting_sound_subtitle">গেমের শব্দ ও ফিডব্যাক</string>
+    <string name="setting_notifications">নোটিফিকেশন</string>
+    <string name="setting_notifications_subtitle">আমন্ত্রণ ও ম্যাচের আপডেট</string>
+    <string name="setting_language">ভাষা</string>
+    <string name="setting_logout">লগআউট</string>
+    <string name="setting_exit_guest">গেস্ট মোড থেকে বের হন</string>
+    <string name="setting_logout_subtitle">পরের ব্যাটলে দেখা হবে</string>
+    <string name="language_english">English</string>
+    <string name="language_bangla">বাংলা</string>
+
+    <!-- Identity -->
+    <string name="identity_title">আপনার পরিচয় দিন</string>
+    <string name="identity_subtitle">ডিসপ্লে নাম ব্যাটলে দেখা যায়। ইউজারনেম অনন্য এবং বন্ধু খোঁজায় ব্যবহৃত হয়।</string>
+    <string name="identity_display_name_label">ডিসপ্লে নাম</string>
+    <string name="identity_username_label">ইউজারনেম</string>
+    <string name="identity_display_name_helper">৩–২০ অক্ষর।</string>
+    <string name="identity_username_helper">৩–২০ অক্ষর: ছোট হাতের ইংরেজি অক্ষর, সংখ্যা ও আন্ডারস্কোর।</string>
+    <string name="identity_save">সংরক্ষণ করে এগিয়ে যান</string>
+    <string name="identity_cooldown_note">আপনি %1$d দিন পরে আবার ডিসপ্লে নাম বদলাতে পারবেন।</string>
+    <string name="identity_cooldown_ready">আপনি এখন ডিসপ্লে নাম বদলাতে পারবেন।</string>
+    <string name="identity_error_name_short">ডিসপ্লে নাম কমপক্ষে ৩ অক্ষরের হতে হবে।</string>
+    <string name="identity_error_name_long">ডিসপ্লে নাম সর্বোচ্চ ২০ অক্ষরের হতে পারে।</string>
+    <string name="identity_error_username_short">ইউজারনেম কমপক্ষে ৩ অক্ষরের হতে হবে।</string>
+    <string name="identity_error_username_long">ইউজারনেম সর্বোচ্চ ২০ অক্ষরের হতে পারে।</string>
+    <string name="identity_error_username_chars">শুধু ছোট হাতের ইংরেজি অক্ষর, সংখ্যা ও আন্ডারস্কোর ব্যবহার করুন।</string>
+
+    <!-- Assignment -->
+    <string name="assignment_title">কারা খেলছে?</string>
+    <string name="assignment_subtitle">প্রতিটি আসনের জন্য লোকাল বা অনলাইন বেছে নিন</string>
+    <string name="assignment_you_host">আপনি • হোস্ট</string>
+    <string name="assignment_player">খেলোয়াড় %1$d</string>
+    <string name="assignment_host_device">হোস্ট ডিভাইস</string>
+    <string name="assignment_joins_with_code">রুম কোড দিয়ে যোগ দেবে</string>
+    <string name="assignment_pass_and_play">পাস-অ্যান্ড-প্লে</string>
+    <string name="assignment_local_badge">লোকাল</string>
+    <string name="assignment_chip_local">লোকাল</string>
+    <string name="assignment_chip_online">অনলাইন</string>
+    <string name="assignment_start_local">লোকাল খেলা শুরু করুন</string>
+    <string name="assignment_create_room">অনলাইন রুম তৈরি করুন</string>
+    <string name="assignment_note_local">নেটওয়ার্ক লাগবে না — প্রতি চালে ডিভাইসটি এগিয়ে দিন।</string>
+    <string name="assignment_note_online">অনলাইন আসনে সরাসরি যোগ দেওয়া যায়; লোকাল আসনগুলো হোস্ট ডিভাইস ভাগ করে নেয়।</string>
+
+    <!-- Room setup -->
+    <string name="room_title">ব্যাটল রুম</string>
+    <string name="room_subtitle">খেলোয়াড়দের আমন্ত্রণ জানান ও প্রস্তুত হন</string>
+    <string name="room_creating">আপনার রুম তৈরি হচ্ছে…</string>
+    <string name="room_code_label">রুম কোড</string>
+    <string name="room_passcode">পাসকোড • %1$s</string>
+    <string name="room_players">খেলোয়াড় %1$d/%2$d</string>
+    <string name="room_start_battle">ব্যাটল শুরু করুন</string>
+    <string name="room_waiting_note">সব অনলাইন খেলোয়াড়ের যোগ দিয়ে রেডি চাপার অপেক্ষায়…</string>
+    <string name="room_share_title">ব্যাটল রুম শেয়ার করুন</string>
+    <string name="room_share_message">আমার ওয়ার্ড ব্যাটলে যোগ দিন! রুম: %1$s • পাসকোড: %2$s</string>
+
+    <!-- Slots -->
+    <string name="slot_waiting">খেলোয়াড়ের অপেক্ষায়…</string>
+    <string name="slot_local">লোকাল • হোস্ট ডিভাইস</string>
+    <string name="slot_online_seat">অনলাইন আসন %1$d</string>
+    <string name="slot_ready">প্রস্তুত</string>
+    <string name="slot_open">খালি</string>
+    <string name="slot_not_ready">প্রস্তুত নয়</string>
+
+    <!-- Join room -->
+    <string name="join_title">রুমে যোগ দিন</string>
+    <string name="join_card_title">ব্যাটলের তথ্য দিন</string>
+    <string name="join_card_subtitle">হোস্টের কাছ থেকে দুটি কোডই নিন।</string>
+    <string name="join_code_label">৬ অক্ষরের রুম কোড</string>
+    <string name="join_passcode_label">৪ সংখ্যার পাসকোড</string>
+    <string name="join_button">ব্যাটলে যোগ দিন</string>
+
+    <!-- Lobby -->
+    <string name="lobby_title">রুম লবি</string>
+    <string name="lobby_subtitle">সবাই প্রস্তুত হলে হোস্ট শুরু করবে</string>
+    <string name="lobby_code">কোড  %1$s</string>
+    <string name="lobby_code_placeholder">——</string>
+    <string name="lobby_ready_done">আমি প্রস্তুত ✓</string>
+    <string name="lobby_ready_up">প্রস্তুত হোন</string>
+    <string name="lobby_note_ready">প্রস্তুত! হোস্টের অপেক্ষায়…</string>
+    <string name="lobby_note_tap">ব্যাটলের জন্য প্রস্তুত হলে চাপ দিন।</string>
+
+    <!-- Game -->
+    <string name="game_loading">ব্যাটল লোড হচ্ছে…</string>
+    <string name="game_you">আপনি</string>
+    <string name="game_title">ওয়ার্ড ব্যাটল</string>
+    <string name="game_your_move">আপনার চাল, %1$s</string>
+    <string name="game_waiting_for">%1$s-এর অপেক্ষায়</string>
+    <string name="game_waiting_for_player">খেলোয়াড়ের অপেক্ষায়</string>
+    <string name="game_timer_seconds">%1$d সে.</string>
+    <string name="game_status_waiting">অপেক্ষা</string>
+    <string name="game_status_pick">একটি অক্ষর বাছুন</string>
+    <string name="game_status_place">বোর্ডে %1$s বসান</string>
+    <string name="game_read_only">শুধু দেখা যাবে — এখন আপনার চাল নয়</string>
+
+    <!-- Results -->
+    <string name="results_you_win">আপনি জিতেছেন!</string>
+    <string name="results_win_subtitle">বোর্ডের চ্যাম্পিয়ন</string>
+    <string name="results_title">ব্যাটল শেষ!</string>
+    <string name="results_subtitle">দারুণ শব্দযুদ্ধ হলো</string>
+    <string name="results_winner">বিজয়ী</string>
+    <string name="results_points">%1$d পয়েন্ট</string>
+    <string name="results_play_again">আবার খেলুন</string>
+    <string name="results_home">হোমে ফিরুন</string>
+    <string name="results_rank">#%1$d</string>
+
+    <!-- Connectivity -->
+    <string name="offline_dialog_title">ইন্টারনেট সংযোগ নেই</string>
+    <string name="offline_dialog_body">এই কাজের জন্য ইন্টারনেট দরকার। ওয়াই-ফাই বা মোবাইল ডেটা দেখে আবার চেষ্টা করুন। কম্পিউটার ও পাস-অ্যান্ড-প্লে মোড অফলাইনেও চলবে।</string>
+    <string name="banner_reconnecting">সংযোগ বিচ্ছিন্ন — পুনরায় যুক্ত হচ্ছে…</string>
+    <string name="banner_offline">আপনি অফলাইনে আছেন</string>
+    <string name="toast_back_online">আবার অনলাইন — সিঙ্ক হচ্ছে…</string>
+
+    <!-- Toasts -->
+    <string name="toast_welcome">স্বাগতম, %1$s!</string>
+    <string name="toast_offline_ready">অফলাইন মোড প্রস্তুত</string>
+    <string name="toast_sign_in_online_room">অনলাইন রুম তৈরি করতে সাইন ইন করুন</string>
+    <string name="toast_sign_in_join">অনলাইন রুমে যোগ দিতে সাইন ইন করুন</string>
+    <string name="toast_sign_in_create">অনলাইন রুম তৈরি করতে সাইন ইন করুন</string>
+    <string name="toast_pick_letter_first">আগে একটি অক্ষর বাছুন</string>
+    <string name="toast_move_rejected">চালটি গ্রহণ করা যায়নি</string>
+    <string name="toast_turn_skipped">চাল বাদ দেওয়া হয়েছে</string>
+    <string name="toast_bot_move">ওয়ার্ড বট: %1$s</string>
+    <string name="toast_move_saved_locally">চাল স্থানীয়ভাবে সংরক্ষিত; পুনরায় যুক্ত হচ্ছে…</string>
+    <string name="toast_lobby_connection_lost">লবির সংযোগ বিচ্ছিন্ন</string>
+    <string name="toast_game_connection_lost">গেমের সংযোগ বিচ্ছিন্ন</string>
+    <string name="toast_friend_request_sent">বন্ধুত্বের অনুরোধ পাঠানো হয়েছে</string>
+    <string name="toast_friend_added">বন্ধু যোগ হয়েছে</string>
+    <string name="toast_invite_hint">রুম তৈরি করে %1$s-কে কোডটি পাঠান</string>
+    <string name="toast_rematch_new_room">রিম্যাচের জন্য নতুন রুম তৈরি করুন</string>
+    <string name="toast_something_wrong">কিছু একটা ভুল হয়েছে</string>
+    <string name="toast_profile_saved">প্রোফাইল হালনাগাদ হয়েছে</string>
+
+    <!-- Placement feedback -->
+    <string name="placement_scored">+%1$d! নতুন শব্দ: %2$s</string>
+    <string name="placement_repeated">+%1$d · শব্দটি আগেই ব্যবহৃত ⚠️</string>
+    <string name="placement_no_word">+%1$d · নতুন শব্দ হয়নি</string>
+    <string name="placement_letter_placed">+%1$d পয়েন্ট</string>
+
+    <!-- Error codes -->
+    <string name="error_no_internet">ইন্টারনেট সংযোগ নেই। সংযোগ দিয়ে আবার চেষ্টা করুন।</string>
+    <string name="error_not_signed_in">আপনি সাইন আউট হয়ে গেছেন। আবার সাইন ইন করুন।</string>
+    <string name="error_profile_missing">আপনার প্লেয়ার প্রোফাইল পাওয়া যায়নি। সাইন আউট করে আবার সাইন ইন করুন।</string>
+    <string name="error_supabase_misconfigured">সার্ভার কনফিগার করা নেই। Supabase URL ও publishable key যোগ করুন।</string>
+    <string name="error_invalid_slots">খেলোয়াড় বিন্যাস সঠিক নয়। ১–৩টি লোকাল আসন ও অন্তত ১টি অনলাইন আসন রাখুন।</string>
+    <string name="error_room_code_unavailable">খালি রুম কোড পাওয়া যায়নি। আবার চেষ্টা করুন।</string>
+    <string name="error_room_create_denied">সার্ভার রুম তৈরি করতে দেয়নি। সর্বশেষ Supabase SQL পলিসি চালান।</string>
+    <string name="error_room_create_failed">রুম তৈরি করা যায়নি। আবার চেষ্টা করুন।</string>
+    <string name="error_room_slots_failed">খেলোয়াড়ের আসন তৈরি করা যায়নি, তাই রুমটি বাতিল করা হয়েছে।</string>
+    <string name="error_room_not_found">রুম পাওয়া যায়নি। কোড ও পাসকোড মিলিয়ে দেখুন।</string>
+    <string name="error_room_full">এই রুম ইতিমধ্যেই পূর্ণ।</string>
+    <string name="error_room_already_started">এই ব্যাটল ইতিমধ্যেই শুরু হয়ে গেছে।</string>
+    <string name="error_room_join_denied">এই রুমে আপনাকে বসানো যায়নি।</string>
+    <string name="error_not_host">শুধু হোস্ট ব্যাটল শুরু করতে পারে।</string>
+    <string name="error_lobby_not_ready">সবাইকে যোগ দিয়ে আগে রেডি চাপতে হবে।</string>
+    <string name="error_username_taken">এই ইউজারনেম আগেই নেওয়া হয়েছে।</string>
+    <string name="error_username_invalid">৩–২০টি ছোট হাতের ইংরেজি অক্ষর, সংখ্যা বা আন্ডারস্কোর ব্যবহার করুন।</string>
+    <string name="error_display_name_invalid">ডিসপ্লে নাম ৩–২০ অক্ষরের হতে হবে।</string>
+    <string name="error_display_name_cooldown">প্রতি ১০ দিনে একবারই ডিসপ্লে নাম বদলানো যায়।</string>
+        <string name="error_game_not_in_progress">এই ব্যাটল এখন চলছে না।</string>
+    <string name="error_not_your_turn">আপনার পালার জন্য অপেক্ষা করুন।</string>
+    <string name="error_turn_already_advanced">চাল ইতিমধ্যেই পরের জনে গেছে।</string>
+    <string name="error_unknown">কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।</string>
+</resources>

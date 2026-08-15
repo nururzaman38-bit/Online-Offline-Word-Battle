@@ -1,11 +1,17 @@
 package com.wordbattle.com.data.repository
 
+import com.wordbattle.com.data.game.ProfileRules
 import com.wordbattle.com.data.local.CachedProfileEntity
 import com.wordbattle.com.data.local.ProfileDao
+import com.wordbattle.com.data.model.AppErrorCode
+import com.wordbattle.com.data.model.AppException
 import com.wordbattle.com.data.model.FriendProfile
 import com.wordbattle.com.data.model.UserProfile
+import com.wordbattle.com.data.model.appErrorCode
 import com.wordbattle.com.data.remote.dto.FriendshipDto
+import com.wordbattle.com.data.remote.dto.NewProfileDto
 import com.wordbattle.com.data.remote.dto.ProfileDto
+import com.wordbattle.com.data.remote.dto.ProfileIdentityDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
@@ -41,9 +47,11 @@ class UserRepository(
             filter { eq("id", fallback.uid) }
             limit(1)
         }.decodeList<ProfileDto>().firstOrNull()
-        val profile = existing?.toModel() ?: client.from("profiles").insert(ProfileDto.from(fallback)) {
-            select()
-        }.decodeSingle<ProfileDto>().toModel()
+        // Insert with NewProfileDto so server defaults (coins, level, timestamps) are applied and
+        // no null is written over a generated column.
+        val profile = existing?.toModel() ?: client.from("profiles").insert(
+            NewProfileDto(fallback.uid, fallback.displayName, fallback.username, fallback.photoUrl)
+        ) { select() }.decodeSingle<ProfileDto>().toModel()
         cache(profile)
         return profile
     }
@@ -84,13 +92,66 @@ class UserRepository(
         }
     }
 
+    /**
+     * Finds players by their globally unique `username`.
+     *
+     * Usernames are stored lowercase, so the query is normalized the same way and matched with a
+     * server-side prefix/contains search instead of downloading the whole table.
+     */
     suspend fun searchProfiles(query: String, currentUid: String): List<UserProfile> {
-        if (query.trim().length < 2) return emptyList()
-        // Profiles are public by the supplied RLS; local filtering avoids wildcard escaping mistakes.
-        return client.from("profiles").select { limit(100) }.decodeList<ProfileDto>()
-            .asSequence().map(ProfileDto::toModel)
-            .filter { it.uid != currentUid && it.displayName.contains(query.trim(), ignoreCase = true) }
-            .take(20).toList()
+        val needle = ProfileRules.normalizeUsername(query)
+        if (needle.length < 2) return emptyList()
+        return client.from("profiles").select {
+            filter { ilike("username", "%$needle%") }
+            order("username", Order.ASCENDING)
+            limit(20)
+        }.decodeList<ProfileDto>()
+            .map(ProfileDto::toModel)
+            .filter { it.uid != currentUid }
+    }
+
+    /** True when nobody else owns [username]. Used to give instant feedback before saving. */
+    suspend fun isUsernameAvailable(username: String, currentUid: String): Boolean {
+        val value = ProfileRules.normalizeUsername(username)
+        if (!ProfileRules.isValidUsername(value)) return false
+        val owner = client.from("profiles").select {
+            filter { eq("username", value) }
+            limit(1)
+        }.decodeList<ProfileDto>().firstOrNull() ?: return true
+        return owner.id == currentUid
+    }
+
+    /**
+     * Saves the display name and username chosen on the identity screen.
+     *
+     * Validation happens three times on purpose: here (fast feedback), in Postgres check
+     * constraints, and in the display-name cooldown trigger. Database errors are mapped back onto
+     * [AppErrorCode]s so the UI can show a translated message.
+     */
+    suspend fun updateIdentity(profile: UserProfile, displayName: String, username: String): UserProfile {
+        val name = ProfileRules.normalizeDisplayName(displayName)
+        val handle = ProfileRules.normalizeUsername(username)
+        if (!ProfileRules.isValidDisplayName(name)) {
+            throw AppException(AppErrorCode.DISPLAY_NAME_INVALID, "Rejected display name: $name")
+        }
+        if (!ProfileRules.isValidUsername(handle)) {
+            throw AppException(AppErrorCode.USERNAME_INVALID, "Rejected username: $handle")
+        }
+        val nameChanged = name != profile.displayName
+        if (nameChanged && !ProfileRules.canChangeDisplayName(profile.displayNameUpdatedAt)) {
+            throw AppException(AppErrorCode.DISPLAY_NAME_COOLDOWN, "Display name cooldown still active")
+        }
+        if (handle != profile.username && !isUsernameAvailable(handle, profile.uid)) {
+            throw AppException(AppErrorCode.USERNAME_TAKEN, "Username $handle already exists")
+        }
+        val updated = runCatching {
+            client.from("profiles").update(ProfileIdentityDto(name, handle)) {
+                select()
+                filter { eq("id", profile.uid) }
+            }.decodeSingle<ProfileDto>().toModel()
+        }.getOrElse { failure -> throw AppException(failure.appErrorCode(), failure.message, failure) }
+        cache(updated)
+        return updated
     }
 
     suspend fun friends(uid: String): List<FriendProfile> {

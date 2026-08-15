@@ -24,7 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.wordbattle.com.R
 import com.wordbattle.com.ui.components.GoldButton
 import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.components.WhiteCard
@@ -50,10 +52,10 @@ fun AssignmentScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
                 Column {
-                    Text("Who's playing?", color = Color.White, style = MaterialTheme.typography.headlineMedium)
-                    Text("Choose local or online for each seat", color = Color.White.copy(alpha = .7f))
+                    Text(stringResource(R.string.assignment_title), color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(R.string.assignment_subtitle), color = Color.White.copy(alpha = .7f))
                 }
             }
             repeat(playerCount) { index ->
@@ -65,16 +67,28 @@ fun AssignmentScreen(
                         }
                         Spacer(Modifier.size(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(if (index == 0) "You • Host" else "Player ${index + 1}", color = Ink, style = MaterialTheme.typography.titleMedium)
-                            Text(if (index == 0) "Host device" else if (online) "Joins with room code" else "Pass-and-play", color = Muted)
+                            Text(
+                                if (index == 0) stringResource(R.string.assignment_you_host)
+                                else stringResource(R.string.assignment_player, index + 1),
+                                color = Ink, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(
+                                    when {
+                                        index == 0 -> R.string.assignment_host_device
+                                        online -> R.string.assignment_joins_with_code
+                                        else -> R.string.assignment_pass_and_play
+                                    }
+                                ),
+                                color = Muted
+                            )
                         }
                         if (index == 0) {
-                            Surface(shape = CircleShape, color = Gold) { Text("LOCAL", Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = Ink, style = MaterialTheme.typography.labelMedium) }
+                            Surface(shape = CircleShape, color = Gold) { Text(stringResource(R.string.assignment_local_badge), Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = Ink, style = MaterialTheme.typography.labelMedium) }
                         } else {
                             Row {
-                                AssignmentChip("Local", !online, Teal) { if (online) onToggle(index) }
+                                AssignmentChip(stringResource(R.string.assignment_chip_local), !online, Teal) { if (online) onToggle(index) }
                                 Spacer(Modifier.size(5.dp))
-                                AssignmentChip("Online", online, Blue) { if (!online) onToggle(index) }
+                                AssignmentChip(stringResource(R.string.assignment_chip_online), online, Blue) { if (!online) onToggle(index) }
                             }
                         }
                     }
@@ -82,13 +96,16 @@ fun AssignmentScreen(
             }
             Spacer(Modifier.size(5.dp))
             GoldButton(
-                text = if (onlineSlots.isEmpty()) "START LOCAL GAME" else "CREATE ONLINE ROOM",
+                text = stringResource(
+                    if (onlineSlots.isEmpty()) R.string.assignment_start_local else R.string.assignment_create_room
+                ),
                 onClick = onContinue,
                 enabled = !busy
             )
             Text(
-                if (onlineSlots.isEmpty()) "No network needed — pass the device on each turn."
-                else "Online seats join live; local seats share the host device.",
+                stringResource(
+                    if (onlineSlots.isEmpty()) R.string.assignment_note_local else R.string.assignment_note_online
+                ),
                 color = Color.White.copy(alpha = .75f),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )

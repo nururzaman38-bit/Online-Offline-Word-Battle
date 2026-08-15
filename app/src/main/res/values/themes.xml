@@ -1,5 +1,10 @@
 <resources>
-    <style name="Theme.WordBattle" parent="android:style/Theme.Material.Light.NoActionBar">
+    <!--
+        AppCompat parent is required because MainActivity extends AppCompatActivity, which is what
+        makes per-app language selection (AppCompatDelegate.setApplicationLocales) work on every
+        supported API level. Compose renders the real UI, so only window level attributes matter.
+    -->
+    <style name="Theme.WordBattle" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:fontFamily">@font/nunito_variable</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:statusBarColor">@color/purple_dark</item>

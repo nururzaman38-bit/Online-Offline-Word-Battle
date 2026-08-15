@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,8 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -48,6 +45,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -55,8 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wordbattle.com.data.model.Player
 import com.wordbattle.com.data.model.UserProfile
+import com.wordbattle.com.R
 import com.wordbattle.com.ui.BattleToast
 import com.wordbattle.com.ui.ToastKind
+import com.wordbattle.com.ui.asString
 import com.wordbattle.com.ui.theme.Blue
 import com.wordbattle.com.ui.theme.CardWhite
 import com.wordbattle.com.ui.theme.Gold
@@ -234,7 +234,9 @@ fun TopPlayerBar(profile: UserProfile?, onSettings: () -> Unit) {
         CurrencyPill(Icons.Default.Star, profile?.coins ?: 0, Gold)
         Spacer(Modifier.size(8.dp))
         CurrencyPill(Icons.Default.Diamond, profile?.gems ?: 0, Blue)
-        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Settings", tint = Color.White) }
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Default.Settings, stringResource(R.string.action_settings), tint = Color.White)
+        }
     }
 }
 
@@ -280,7 +282,8 @@ fun BattleToastOverlay(toast: BattleToast?, modifier: Modifier = Modifier) {
         shadowElevation = 12.dp
     ) {
         Text(
-            toast.text,
+            // Resolved inside composition so a language switch re-renders a visible toast.
+            toast.text.asString(),
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 11.dp),
             color = Color.White,
             style = MaterialTheme.typography.labelLarge

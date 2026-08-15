@@ -29,17 +29,27 @@ GOOGLE_WEB_CLIENT_ID=000000000000-example.apps.googleusercontent.com
 
 Enable Google under Supabase Authentication providers and enter its client ID/secret. The application uses Credential Manager, creates a SHA-256 nonce, and exchanges the native Google ID token with Supabase Auth.
 
-Email/password and offline guest entry are also available on the login screen.
+Google is the primary login button. An expandable email/password section sits below it: there is no separate register mode, the app signs in and transparently creates the account when it does not exist yet. Offline guest entry is also available.
 
 ### 3. Supabase database
 
-Run [`supabase/schema.sql`](supabase/schema.sql) manually in the Supabase SQL Editor. It includes:
+Run the SQL files manually in the Supabase SQL Editor.
 
-- all five required tables;
-- constraints and RLS policies;
-- the host `room_slots` INSERT policy needed by room creation;
-- a host-only `games` INSERT policy; and
-- Realtime publication for `profiles`, `rooms`, `room_slots`, and `games`.
+| File | When to run it | What it does |
+| --- | --- | --- |
+| [`supabase/schema.sql`](supabase/schema.sql) | New project (contains everything below) | Tables, constraints, triggers, RLS policies, grants, indexes, Realtime publications |
+| [`supabase/room_creation_fix.sql`](supabase/room_creation_fix.sql) | Existing project with room creation/join problems | Host `rooms` INSERT/UPDATE/**DELETE** policies, `room_slots` INSERT policy, "claim an empty online slot only" join policy, corrected ready-update policy, missing grants, Realtime publications |
+| [`supabase/update_username_cooldown.sql`](supabase/update_username_cooldown.sql) | Existing project without usernames | Globally unique lowercase `profiles.username`, `display_name_updated_at`, and the trigger enforcing the 10-day display-name cooldown |
+
+Both fix scripts are idempotent and can be re-run safely.
+
+Key points these policies guarantee:
+
+- room slots are inserted **without** an `id`, so `gen_random_uuid()` generates it;
+- the host can delete a room whose slots failed, so no ghost lobbies remain;
+- a joiner can only claim a slot that is still empty *and* belongs to the online slot range;
+- ready flags can only be toggled on the caller's own slot;
+- a display name can only change once every 10 days, enforced in Postgres as well as in the app.
 
 The app contains only the supplied publishable key. **Never add a `service_role` key to this repository or an Android client.**
 
@@ -64,7 +74,37 @@ Follow [`docs/RELEASE_SIGNING.md`](docs/RELEASE_SIGNING.md). The GitHub workflow
 ./gradlew assembleDebug
 ```
 
-Core tests cover contiguous horizontal/vertical detection, cross words, blocked overwrites, one-letter moves, case-insensitive global used words, ranking/finish behavior, invalid turns, and offline AI move selection.
+Core tests cover contiguous horizontal/vertical detection, sub-words inside a longer run, cross words, blocked overwrites, the per-letter point, case-insensitive global used words, ranking/finish behavior, invalid turns, offline AI move selection, and English/Bengali string parity.
+
+## Scoring rules
+
+- Placing a letter always pays **1 point**, even when it forms nothing.
+- If the placement completes a valid dictionary word, the player also earns **1 point per letter of that word** (so `CAT` pays 3 on top of the placement point).
+- A word counts as long as it is a contiguous horizontal or vertical run through the new cell, **including a sub-segment of a longer run**: dropping `T` after `…BDOCA` scores `CAT`.
+- Both axes are scored, so a cross placement can bank two words at once. Inside one axis the longest still-unused dictionary word wins.
+- A word can only be scored once per match (case-insensitively). Repeating it still pays the placement point and shows a warning.
+- First player to **100 points** is ranked; play continues until only one player is unranked.
+
+## Sound and win animation
+
+All audio is generated offline by [`tools/generate_sounds.py`](tools/generate_sounds.py) (Python standard library only, no downloads) into `app/src/main/res/raw`:
+
+| File | Used for |
+| --- | --- |
+| `music_theme.wav` | looping battle theme, started when a game opens |
+| `snd_letter_place.wav` | every letter dropped on the board |
+| `snd_word_scored.wav` | a new word was formed |
+| `snd_timer_tick.wav` | last 10 seconds of a turn |
+| `snd_timer_warning.wav` | last 5 seconds of a turn |
+| `snd_victory.wav` / `snd_defeat.wav` | end of the match |
+
+`SoundManager` (`data/audio`) loads the effects into a `SoundPool` and the theme into a looping `MediaPlayer`. It lives in `AppContainer`, so it survives configuration changes, and the Profile sound toggle mutes everything instantly. The results screen pairs the victory fanfare with `WinCelebration`: falling confetti, rotating light rays, a popping trophy, and staggered standings rows.
+
+Re-running the generator is safe and idempotent:
+
+```bash
+python3 tools/generate_sounds.py
+```
 
 ## App flow
 
@@ -98,18 +138,38 @@ com.wordbattle.com/
     model/        serializable domain models
     repository/   offline game, auth, users, rooms/realtime
     dictionary/   ENABLE loader
+    audio/        SoundManager and the GameSound catalogue
     game/         WordEngine and ComputerAI
     local/        Room database, DAOs, cache entities
     remote/       Supabase provider and wire DTOs
   ui/
     screens/      screen composables
-    components/   shared tiles, cards, buttons, bars, toasts
+    components/   shared tiles, cards, buttons, bars, toasts, win celebration
     theme/        colors, bundled Baloo 2/Nunito typography
     navigation/   state-driven app graph
     MainViewModel.kt
   MainActivity.kt
 ```
 
+## Connectivity
+
+`NetworkConnectivityObserver` wraps `ConnectivityManager` + `NetworkCallback` and exposes a `StateFlow<Boolean>`. Everything that needs the internet — Google login, email login, Create Room, Join Room, Ready, Rank, Friends — is guarded by it. When the device is offline the app shows a dialog with **Retry** and **Network settings** instead of failing silently. If an online match loses the link, a reconnecting banner appears and the Realtime room/game subscriptions are rebuilt automatically once the connection returns.
+
+Computer mode and fully local pass-and-play never touch the network and keep working in airplane mode.
+
+## Online turn ownership
+
+Only the device that owns `current_turn_player_id` can use the rack and the board. Every other device is read-only and shows "Waiting for <player>". The host device drives its own local seats, so a 2-local + 1-online room still plays correctly. Room and game status are synchronized through Realtime.
+
+## Profiles, usernames and language
+
+- The first login opens an identity screen asking for a display name (3–20 characters) and a globally unique username (3–20 lowercase letters, digits, or underscore).
+- Friend search matches usernames server-side.
+- Display names can only be changed once every 10 days; the profile screen shows the remaining days and Postgres rejects earlier attempts.
+- Every user-facing string lives in `res/values/strings.xml` (English) and `res/values-bn/strings.xml` (Bengali). Switching the language in Profile calls `AppCompatDelegate.setApplicationLocales`, which applies instantly and is persisted through `AppLocalesMetadataHolderService`.
+
 ## Security note
 
-The supplied `games` update policy intentionally starts permissive for authenticated players, matching the requested bring-up plan. Before a public production launch, tighten it to verify that `auth.uid()` occurs in the row's `players` JSON and add server-side transactional move validation (RPC/Edge Function) to prevent modified clients from submitting illegal state.
+`games` rows can now only be updated by the host or by a player seated in that room (`is_room_participant`). Turn ownership itself is still enforced on the client. Before a public production launch, tighten it further to verify that `auth.uid()` really owns `current_turn_player_id` and add server-side transactional move validation (RPC/Edge Function) so a modified client cannot submit illegal state.
+
+The app ships with the publishable (anon) key only. `SupabaseConfig` refuses configurations that look like a `service_role` key, and no service key belongs in this repository.

@@ -27,7 +27,8 @@ class ComputerAITest {
         val move = ComputerAI(WordDictionary.fromWords(listOf("AT")), Random(7)).chooseMove(game)
 
         assertNotNull(move)
-        assertEquals(2, move!!.score)
+        // 1 point for the letter itself + 2 letters of "AT".
+        assertEquals(3, move!!.score)
         assertEquals('T', move.letter)
         assertEquals(2, move.row)
         assertEquals(3, move.col)

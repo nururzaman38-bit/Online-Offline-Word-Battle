@@ -205,7 +205,8 @@ private fun MessageTabContent(
     onOpenThread: (UserProfile) -> Unit,
     onMessageClick: (ChatMessage) -> Unit
 ) {
-    WhiteCard(modifier = Modifier.fillMaxWidth().weight(1f)) {
+    Column(Modifier.fillMaxSize()) {
+        WhiteCard(modifier = Modifier.fillMaxWidth().weight(1f)) {
         if (messages.isEmpty() && friends.isEmpty()) {
             EmptyState(Icons.Default.ChatBubble, "No messages", "Start a conversation with a friend")
         } else {
@@ -241,6 +242,7 @@ private fun MessageTabContent(
                 }
             }
         }
+        }
     }
 }
 
@@ -252,7 +254,8 @@ private fun RequestTabContent(
     onSendLife: (GameRequest) -> Unit,
     onAcceptGameInvite: (GameRequest) -> Unit
 ) {
-    WhiteCard(modifier = Modifier.fillMaxWidth().weight(1f)) {
+    Column(Modifier.fillMaxSize()) {
+        WhiteCard(modifier = Modifier.fillMaxWidth().weight(1f)) {
         if (requests.isEmpty()) {
             EmptyState(Icons.Default.PersonAdd, "No requests", "Friend, life and game invites will appear here")
         } else {
@@ -294,6 +297,7 @@ private fun RequestTabContent(
                     }
                 }
             }
+        }
         }
     }
 }

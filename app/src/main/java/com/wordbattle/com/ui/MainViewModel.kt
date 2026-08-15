@@ -17,6 +17,7 @@ import com.wordbattle.com.data.game.PuzzleEngine
 import com.wordbattle.com.data.game.RoomManager
 import com.wordbattle.com.data.model.AppErrorCode
 import com.wordbattle.com.data.model.CampaignProgress
+import com.wordbattle.com.data.model.ChatMessage
 import com.wordbattle.com.data.model.FriendProfile
 import com.wordbattle.com.data.model.GameMode
 import com.wordbattle.com.data.model.GameRequest
@@ -790,7 +791,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else ai
 
             val move = levelAi.chooseMove(current) ?: return@launch
-            games.placeLetter(current, move.row, move.col, move.letter, current.currentTurnPlayerId).let { res ->
+            games.placeLetter(current, current.currentTurnPlayerId, move.row, move.col, move.letter).let { res ->
                 // For campaign, we need to wrap result similar to placeSelectedLetter handling
                 res.onSuccess { placement ->
                     var gameState = placement.gameState
@@ -1339,11 +1340,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         turnTimerJob?.cancel(); turnTimerJob = null
         subscribedRoomId = null
         subscribedGameId = null
-    }
-
-    private fun stopPuzzleTimer() {
-        puzzleTimerJob?.cancel()
-        puzzleTimerJob = null
     }
 
     override fun onCleared() {

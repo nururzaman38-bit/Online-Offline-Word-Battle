@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
@@ -66,7 +67,7 @@ fun MainShellScreen(
 ) {
     GradientBackground {
         Column(Modifier.fillMaxSize()) {
-            TopPlayerBar(state.profile) { onTab(MainTab.PROFILE) }
+            TopPlayerBar(state.profile) { onTab(MainTab.SETTINGS) }
             Box(Modifier.weight(1f)) {
                 when (state.mainTab) {
                     MainTab.HOME -> HomeScreen(
@@ -100,8 +101,18 @@ fun MainShellScreen(
                         onMessageClick = onMessageClick
                     )
                     MainTab.PROFILE -> ProfileScreen(
-                        state.profile, state.isOfflineGuest, state.soundEnabled, state.notificationsEnabled,
-                        state.language, onSound, onNotifications, onLanguage, onEditIdentity, onLogout
+                        state.profile, state.isOfflineGuest, onEditIdentity
+                    )
+                    MainTab.SETTINGS -> SettingsScreen(
+                        profile = state.profile,
+                        offline = state.isOfflineGuest,
+                        sound = state.soundEnabled,
+                        notifications = state.notificationsEnabled,
+                        language = state.language,
+                        onSound = onSound,
+                        onNotifications = onNotifications,
+                        onLanguage = onLanguage,
+                        onLogout = onLogout
                     )
                 }
             }
@@ -116,7 +127,8 @@ private fun BottomBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
         TabItem(MainTab.HOME, R.string.tab_home, Icons.Default.Home),
         TabItem(MainTab.RANK, R.string.tab_rank, Icons.Default.Leaderboard),
         TabItem(MainTab.FRIENDS, R.string.tab_friends, Icons.Default.Groups),
-        TabItem(MainTab.PROFILE, R.string.tab_profile, Icons.Default.Person)
+        TabItem(MainTab.PROFILE, R.string.tab_profile, Icons.Default.Person),
+        TabItem(MainTab.SETTINGS, R.string.tab_settings, Icons.Default.Settings)
     )
     Surface(
         modifier = Modifier.fillMaxWidth(),

@@ -44,6 +44,7 @@
     <string name="tab_rank">Rank</string>
     <string name="tab_friends">Friends</string>
     <string name="tab_profile">Profile</string>
+    <string name="tab_settings">Settings</string>
 
     <!-- Home -->
     <string name="home_weekly_quest">WEEKLY QUEST</string>

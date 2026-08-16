@@ -110,7 +110,8 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
                         state.profile?.uid,
                         state.isBusy,
                         viewModel::setReady,
-                        viewModel::goBack
+                        viewModel::goBack,
+                        viewModel::refreshLobby
                     )
                     RootScreen.GAME -> GameScreen(
                         state.game,

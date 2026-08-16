@@ -294,7 +294,17 @@ class RoomRepository(
     }
 
     fun observeRoom(roomId: String): Flow<Room> = callbackFlow {
-        getRoom(roomId)?.let { send(it) }
+        var lastSig: String? = null
+        fun emitIfChanged(room: Room?) {
+            val room = room ?: return
+            val sig = roomSignature(room)
+            if (sig != lastSig) {
+                lastSig = sig
+                trySend(room)
+            }
+        }
+        // Emit the current snapshot immediately so the lobby is never blank on entry.
+        emitIfChanged(getRoom(roomId))
         val channel = client.channel("room-$roomId-${System.nanoTime()}")
         val slotChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "room_slots"
@@ -305,9 +315,13 @@ class RoomRepository(
             filter("id", FilterOperator.EQ, roomId)
         }
         val collector = launch {
-            merge(slotChanges, roomChanges).collect { getRoom(roomId)?.let { trySend(it) } }
+            merge(slotChanges, roomChanges).collect { emitIfChanged(getRoom(roomId)) }
         }
         channel.subscribe()
+        // Re-fetch once more after the subscription is established. Any writes that landed in the
+        // window between the first fetch and the realtime handshake are now captured, keeping the
+        // lobby in sync even when the initial change was missed.
+        emitIfChanged(getRoom(roomId))
         awaitClose {
             collector.cancel()
             cleanupScope.launch { client.realtime.removeChannel(channel) }
@@ -345,5 +359,13 @@ class RoomRepository(
 
     private companion object {
         const val MAX_ROOM_CODE_ATTEMPTS = 5
+    }
+
+    /** Stable signature so identical re-fetches don't spam the collector with duplicate emissions. */
+    private fun roomSignature(room: Room): String = buildString {
+        append(room.roomId).append(':').append(room.status).append(':').append(room.gameId)
+        room.slots.forEach { slot ->
+            append('|').append(slot.slotIndex).append(':').append(slot.filledByUid).append(':').append(slot.isReady)
+        }
     }
 }

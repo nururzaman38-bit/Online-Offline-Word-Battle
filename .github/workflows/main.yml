@@ -82,60 +82,15 @@ jobs:
           echo "Android API 36 is ready."
 
       # =========================================================
-      # 5. Temporary API 36 dependency compatibility
-      # Nothing is committed
+      # 5. Verify pinned build configuration
+      # SDK and dependency versions are pinned in the repo itself
+      # (app/build.gradle.kts). CI builds exactly what developers
+      # run locally — no in-CI patching or silent downgrades.
       # =========================================================
-      - name: Configure project for Android API 36
+      - name: Verify pinned build configuration
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("app/build.gradle.kts")
-
-          if not path.exists():
-              raise SystemExit("app/build.gradle.kts was not found")
-
-          text = path.read_text(encoding="utf-8")
-
-          replacements = [
-              (
-                  "compileSdk = 37",
-                  "compileSdk = 36"
-              ),
-              (
-                  "targetSdk = 37",
-                  "targetSdk = 36"
-              ),
-              (
-                  "androidx.compose:compose-bom:2026.08.00",
-                  "androidx.compose:compose-bom:2026.06.01"
-              ),
-              (
-                  "androidx.core:core-ktx:1.19.0",
-                  "androidx.core:core-ktx:1.18.0"
-              ),
-              (
-                  "androidx.lifecycle:lifecycle-runtime-compose:2.11.0",
-                  "androidx.lifecycle:lifecycle-runtime-compose:2.10.0"
-              ),
-              (
-                  "androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0",
-                  "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
-              ),
-          ]
-
-          for old, new in replacements:
-              if old in text:
-                  text = text.replace(old, new)
-                  print(f"Changed: {old} -> {new}")
-              elif new in text:
-                  print(f"Already configured: {new}")
-              else:
-                  print(f"Not found, skipped: {old}")
-
-          path.write_text(text, encoding="utf-8")
-          PY
+          set -e
 
           echo "Effective build configuration:"
 
@@ -144,7 +99,12 @@ jobs:
             app/build.gradle.kts || true
 
           if ! grep -q 'compileSdk = 36' app/build.gradle.kts; then
-            echo "::error::compileSdk is not 36."
+            echo "::error::compileSdk must stay 36 (it matches the platform installed in step 4)."
+            exit 1
+          fi
+
+          if ! grep -q 'targetSdk = 36' app/build.gradle.kts; then
+            echo "::error::targetSdk must stay 36."
             exit 1
           fi
 
@@ -344,7 +304,22 @@ jobs:
             --stacktrace
 
       # =========================================================
-      # 13. Locate APK
+      # 13. Upload unit test report when tests fail
+      # Makes the failing assertion readable from the
+      # workflow Artifacts page without re-running the build.
+      # =========================================================
+      - name: Upload unit test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report-${{ github.run_number }}
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 14
+          compression-level: 6
+
+      # =========================================================
+      # 14. Locate APK
       # =========================================================
       - name: Locate release APK
         shell: bash
@@ -385,7 +360,7 @@ jobs:
           echo "apksigner: $APKSIGNER"
 
       # =========================================================
-      # 14. Verify signature
+      # 15. Verify signature
       # =========================================================
       - name: Verify APK signature
         shell: bash
@@ -397,7 +372,7 @@ jobs:
             | tee apk-certificate.txt
 
       # =========================================================
-      # 15. Generate SHA-1 and SHA-256
+      # 16. Generate SHA-1 and SHA-256
       # =========================================================
       - name: Generate signing fingerprints
         id: fingerprints
@@ -521,7 +496,7 @@ jobs:
           cat signing-fingerprints.txt
 
       # =========================================================
-      # 16. Prepare artifact
+      # 17. Prepare artifact
       # =========================================================
       - name: Prepare signed APK artifact
         shell: bash
@@ -540,7 +515,7 @@ jobs:
           ls -lh signed-artifact
 
       # =========================================================
-      # 17. Upload artifact
+      # 18. Upload artifact
       # =========================================================
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
@@ -552,7 +527,7 @@ jobs:
           compression-level: 6
 
       # =========================================================
-      # 18. Optional GitHub Release
+      # 19. Optional GitHub Release
       # =========================================================
       - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -574,7 +549,7 @@ jobs:
           fi
 
       # =========================================================
-      # 19. Delete temporary JKS
+      # 20. Delete temporary JKS
       # =========================================================
       - name: Remove temporary JKS
         if: always()

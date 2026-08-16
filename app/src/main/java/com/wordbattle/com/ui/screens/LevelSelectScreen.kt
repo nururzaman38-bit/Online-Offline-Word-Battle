@@ -50,7 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wordbattle.com.R
-import com.wordbattle.com.data.model.AiDifficulty
+import com.wordbattle.com.data.game.AiDifficulty
 import com.wordbattle.com.data.model.CampaignProgress
 import com.wordbattle.com.data.model.LevelDefinition
 import com.wordbattle.com.data.model.LevelType
@@ -218,8 +218,9 @@ private fun ChapterLevels(
         // This avoids requesting an infinite height when this item is measured by LazyColumn.
         Canvas(Modifier.matchParentSize()) {
             val cx = (nodeAreaW / 2).toPx()
-            val firstY = (spacing / 2).toPx()
-            val lastY = ((levels.size - 1) * spacing + spacing / 2).toPx()
+            val spacingPx = spacing.toPx()
+            val firstY = spacingPx / 2f
+            val lastY = (levels.size - 0.5f) * spacingPx
             val path = Path()
             val steps = 56
             for (i in 0..steps) {
@@ -229,14 +230,14 @@ private fun ChapterLevels(
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             drawPath(
-                path,
-                BrownInk.copy(alpha = 0.30f),
-                Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                path = path,
+                color = BrownInk.copy(alpha = 0.30f),
+                style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
             drawPath(
-                path,
-                BrownInk.copy(alpha = 0.72f),
-                Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                path = path,
+                color = BrownInk.copy(alpha = 0.72f),
+                style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
         }
 

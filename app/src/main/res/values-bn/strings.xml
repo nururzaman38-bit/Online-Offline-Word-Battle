@@ -44,6 +44,7 @@
     <string name="tab_rank">র‍্যাঙ্ক</string>
     <string name="tab_friends">বন্ধু</string>
     <string name="tab_profile">প্রোফাইল</string>
+    <string name="tab_settings">সেটিংস</string>
 
     <!-- Home -->
     <string name="home_weekly_quest">সাপ্তাহিক চ্যালেঞ্জ</string>

@@ -215,7 +215,9 @@ private fun ChapterLevels(
 
     Box(Modifier.fillMaxWidth()) {
         // Hand-drawn ink trail weaving down the node column
-        Canvas(Modifier.fillMaxSize()) {
+        // Match the size established by the level rows without participating in Box measurement.
+        // This avoids requesting an infinite height when this item is measured by LazyColumn.
+        Canvas(Modifier.matchParentSize()) {
             val cx = (nodeAreaW / 2).toPx()
             val firstY = (spacing / 2).toPx()
             val lastY = ((levels.size - 1) * spacing + spacing / 2).toPx()

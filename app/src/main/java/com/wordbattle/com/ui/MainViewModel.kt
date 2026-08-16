@@ -253,12 +253,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectMainTab(tab: MainTab) {
+        // The conversation subscription is only needed while its list is actually visible.
+        if (tab != MainTab.FRIENDS) stopMessageListObservation()
         when (tab) {
             MainTab.RANK -> requireOnlineTab(tab) { loadLeaderboard() }
             MainTab.FRIENDS -> requireOnlineTab(tab) {
                 loadFriends()
                 loadRequests()
-                loadMessages()
+                if (uiState.value.friendsTab == FriendsTab.MESSAGE) loadMessages()
             }
             else -> _uiState.update { it.copy(mainTab = tab) }
         }
@@ -267,12 +269,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectFriendsTab(tab: FriendsTab) {
         _uiState.update { it.copy(friendsTab = tab) }
         when (tab) {
-            FriendsTab.REQUEST -> loadRequests()
-            FriendsTab.MESSAGE -> loadMessages()
-            FriendsTab.FRIENDS -> {
-                // Conversation list isn't visible here; stop its realtime channel.
-                messageListJob?.cancel(); messageListJob = null
+            FriendsTab.REQUEST -> {
+                stopMessageListObservation()
+                loadRequests()
             }
+            FriendsTab.MESSAGE -> loadMessages()
+            FriendsTab.FRIENDS -> stopMessageListObservation()
         }
     }
 
@@ -1007,6 +1009,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openThread(friend: UserProfile) {
         val uid = uiState.value.profile?.uid ?: return
+        // The thread replaces the conversation-list screen, so keep only one messages channel.
+        stopMessageListObservation()
         messageThreadJob?.cancel()
         messageThreadJob = viewModelScope.launch {
             val thread = runCatching { messageRepo.getThread(uid, friend.uid) }.getOrDefault(emptyList())
@@ -1041,7 +1045,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val sent = messageRepo.sendMessage(uid, friend.uid, body)
-                _uiState.update { it.copy(messageThread = it.messageThread + sent) }
+                // Realtime may deliver the inserted row before sendMessage returns; append only if
+                // the observer has not already included it.
+                _uiState.update { state ->
+                    if (state.messageThread.any { it.id == sent.id }) state
+                    else state.copy(messageThread = state.messageThread + sent)
+                }
             } catch (e: Exception) {
                 showToast(e.toUiText(R.string.toast_something_wrong), ToastKind.WARNING)
             }
@@ -1175,6 +1184,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             RootScreen.MESSAGE_THREAD -> {
                 messageThreadJob?.cancel(); messageThreadJob = null
                 _uiState.update { it.copy(rootScreen = RootScreen.MAIN, messageThread = emptyList(), selectedThreadFriend = null) }
+                if (uiState.value.mainTab == MainTab.FRIENDS &&
+                    uiState.value.friendsTab == FriendsTab.MESSAGE
+                ) {
+                    loadMessages()
+                }
             }
             RootScreen.IDENTITY ->
                 if (uiState.value.identityEditing) {
@@ -1381,8 +1395,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
     }
 
-    private fun stopMessageObservation() {
+    private fun stopMessageListObservation() {
         messageListJob?.cancel(); messageListJob = null
+    }
+
+    private fun stopMessageObservation() {
+        stopMessageListObservation()
         messageThreadJob?.cancel(); messageThreadJob = null
     }
 

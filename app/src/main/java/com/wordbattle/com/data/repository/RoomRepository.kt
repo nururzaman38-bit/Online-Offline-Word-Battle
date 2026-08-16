@@ -295,12 +295,15 @@ class RoomRepository(
 
     fun observeRoom(roomId: String): Flow<Room> = callbackFlow {
         var lastSig: String? = null
-        fun emitIfChanged(room: Room?) {
-            val room = room ?: return
-            val sig = roomSignature(room)
-            if (sig != lastSig) {
-                lastSig = sig
-                trySend(room)
+        // Keep this as a lambda so it retains callbackFlow's ProducerScope receiver. A local
+        // function would not inherit that receiver, making trySend unresolved at compile time.
+        val emitIfChanged: (Room?) -> Unit = { candidate ->
+            candidate?.let { room ->
+                val sig = roomSignature(room)
+                if (sig != lastSig) {
+                    lastSig = sig
+                    trySend(room)
+                }
             }
         }
         // Emit the current snapshot immediately so the lobby is never blank on entry.

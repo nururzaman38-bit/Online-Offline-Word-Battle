@@ -8,7 +8,9 @@ import com.wordbattle.com.data.model.Player
 import com.wordbattle.com.data.model.PlayerType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 import kotlin.random.Random
 
 class ComputerAITest {
@@ -27,10 +29,18 @@ class ComputerAITest {
         val move = ComputerAI(WordDictionary.fromWords(listOf("AT")), Random(7)).chooseMove(game)
 
         assertNotNull(move)
-        // 1 point for the letter itself + 2 letters of "AT".
-        assertEquals(3, move!!.score)
+        move!!
+        // 1 point for the letter itself + 2 letters of the word "AT".
+        assertEquals(3, move.score)
         assertEquals('T', move.letter)
-        assertEquals(2, move.row)
-        assertEquals(3, move.col)
+        // The search visits cells in a fixed order and keeps the FIRST move with the top
+        // score, and the game scores a word read in either direction. So completing the
+        // existing 'A' as "AT" to the right/below or as "TA" (= "AT" read backwards)
+        // above/left are four equally optimal moves worth exactly 3 points. Pin the real
+        // invariant (score, letter, adjacency) instead of one arbitrary tie-broken cell.
+        assertTrue(
+            "AI must extend the existing 'A' at (2,2), but chose (${move.row}, ${move.col})",
+            abs(move.row - 2) + abs(move.col - 2) == 1
+        )
     }
 }

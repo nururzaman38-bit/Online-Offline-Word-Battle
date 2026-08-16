@@ -72,6 +72,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var turnTimerJob: Job? = null
     private var puzzleTimerJob: Job? = null
     private var toastJob: Job? = null
+    private var messageListJob: Job? = null
+    private var messageThreadJob: Job? = null
     private val reportedGameIds = mutableSetOf<String>()
     private val celebratedGameIds = mutableSetOf<String>()
 
@@ -267,7 +269,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when (tab) {
             FriendsTab.REQUEST -> loadRequests()
             FriendsTab.MESSAGE -> loadMessages()
-            else -> {}
+            FriendsTab.FRIENDS -> {
+                // Conversation list isn't visible here; stop its realtime channel.
+                messageListJob?.cancel(); messageListJob = null
+            }
         }
     }
 
@@ -631,6 +636,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         requireOnline { launchBusy { rooms.setReady(roomId, uid, ready) } }
     }
 
+    /** Manual lobby re-sync — pulls the latest room snapshot from the server on demand. */
+    fun refreshLobby() {
+        val roomId = subscribedRoomId ?: uiState.value.room?.roomId ?: return
+        viewModelScope.launch {
+            runCatching { rooms.getRoom(roomId) }.getOrNull()?.let { room ->
+                _uiState.update { it.copy(room = room) }
+            }
+        }
+    }
+
     fun startHostedGame() {
         val state = uiState.value
         val uid = state.profile?.uid ?: return
@@ -973,9 +988,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loadMessages() {
         val uid = uiState.value.profile?.uid ?: return
         if (uiState.value.isOfflineGuest || !uiState.value.isOnline) return
-        viewModelScope.launch {
-            val msgs = runCatching { messageRepo.getConversations(uid) }.getOrDefault(emptyList())
-            _uiState.update { it.copy(messages = msgs) }
+        messageListJob?.cancel()
+        messageListJob = viewModelScope.launch {
+            // Live conversation list: realtime updates push new messages without a manual refresh.
+            messageRepo.observeMessages(uid)
+                .catch { }
+                .collect { msgs -> _uiState.update { it.copy(messages = msgs) } }
         }
     }
 
@@ -989,7 +1007,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openThread(friend: UserProfile) {
         val uid = uiState.value.profile?.uid ?: return
-        viewModelScope.launch {
+        messageThreadJob?.cancel()
+        messageThreadJob = viewModelScope.launch {
             val thread = runCatching { messageRepo.getThread(uid, friend.uid) }.getOrDefault(emptyList())
             _uiState.update {
                 it.copy(
@@ -998,6 +1017,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     rootScreen = RootScreen.MESSAGE_THREAD
                 )
             }
+            // Live thread: new incoming/outgoing messages stream in without leaving the screen.
+            messageRepo.observeThread(uid, friend.uid)
+                .catch { }
+                .collect { msgs -> _uiState.update { it.copy(messageThread = msgs) } }
         }
     }
 
@@ -1148,7 +1171,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun goBack() {
         when (uiState.value.rootScreen) {
-            RootScreen.ASSIGNMENT, RootScreen.JOIN_ROOM, RootScreen.LEVEL_SELECT, RootScreen.MESSAGE_THREAD -> _uiState.update { it.copy(rootScreen = RootScreen.MAIN) }
+            RootScreen.ASSIGNMENT, RootScreen.JOIN_ROOM, RootScreen.LEVEL_SELECT -> _uiState.update { it.copy(rootScreen = RootScreen.MAIN) }
+            RootScreen.MESSAGE_THREAD -> {
+                messageThreadJob?.cancel(); messageThreadJob = null
+                _uiState.update { it.copy(rootScreen = RootScreen.MAIN, messageThread = emptyList(), selectedThreadFriend = null) }
+            }
             RootScreen.IDENTITY ->
                 if (uiState.value.identityEditing) {
                     _uiState.update { it.copy(rootScreen = RootScreen.MAIN, identityEditing = false) }
@@ -1183,6 +1210,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun goHome() {
         stopRealtime()
         stopPuzzleTimer()
+        stopMessageObservation()
         sound.stopTheme()
         _uiState.update {
             it.copy(
@@ -1203,6 +1231,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopPuzzleTimer()
         sound.stopTheme()
         pauseSocialRealtime()
+        stopMessageObservation()
         if (!uiState.value.isOfflineGuest) runCatching { auth.signOut() }
         _uiState.value = MainUiState(
             rootScreen = RootScreen.LOGIN,
@@ -1346,9 +1375,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopRealtime()
         stopPuzzleTimer()
         sound.stopTheme()
+        stopMessageObservation()
         presenceJob?.cancel()
         leaderboardJob?.cancel()
         super.onCleared()
+    }
+
+    private fun stopMessageObservation() {
+        messageListJob?.cancel(); messageListJob = null
+        messageThreadJob?.cancel(); messageThreadJob = null
     }
 
     companion object {

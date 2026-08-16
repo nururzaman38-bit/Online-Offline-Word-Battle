@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,7 +28,14 @@ import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.theme.Gold
 
 @Composable
-fun LobbyScreen(room: Room?, currentUid: String?, busy: Boolean, onReady: (Boolean) -> Unit, onBack: () -> Unit) {
+fun LobbyScreen(
+    room: Room?,
+    currentUid: String?,
+    busy: Boolean,
+    onReady: (Boolean) -> Unit,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit = {}
+) {
     val mySlot = room?.slots?.firstOrNull { it.filledByUid == currentUid }
     GradientBackground {
         Column(
@@ -35,10 +43,11 @@ fun LobbyScreen(room: Room?, currentUid: String?, busy: Boolean, onReady: (Boole
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.action_back), tint = Color.White) }
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.lobby_title), color = Color.White, style = MaterialTheme.typography.headlineMedium)
                     Text(stringResource(R.string.lobby_subtitle), color = Color.White.copy(alpha = .7f))
                 }
+                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, stringResource(R.string.action_retry), tint = Color.White) }
             }
             Spacer(Modifier.size(14.dp))
             Text(

@@ -306,3 +306,18 @@ fun EmptyState(icon: ImageVector, title: String, body: String) {
         Text(body, style = MaterialTheme.typography.bodyMedium, color = Muted)
     }
 }
+
+@Composable
+fun SettingRow(icon: ImageVector, title: String, subtitle: String, tint: Color = Purple, action: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = CircleShape, color = tint.copy(alpha = .11f)) {
+            Icon(icon, null, tint = tint, modifier = Modifier.padding(9.dp).size(21.dp))
+        }
+        Spacer(Modifier.size(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Ink, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, color = Muted, style = MaterialTheme.typography.bodyMedium)
+        }
+        action()
+    }
+}

@@ -35,6 +35,46 @@ class PuzzleEngineTest {
     }
 
     @Test
+    fun `incomplete run is never a wrong guess`() {
+        // Placing C then A on a 1x3 grid must NOT cost a life — "CA" is only a partial of CAT.
+        val level = LevelDefinition(
+            levelNumber = 103,
+            type = LevelType.PUZZLE_FILL,
+            puzzleGrid = listOf(
+                listOf(cell(CellStyle.BLANK), cell(CellStyle.BLANK), cell(CellStyle.BLANK))
+            )
+        )
+        var state = PuzzleEngine.fromDefinition(level)
+        state = PuzzleEngine.withLetter(state, 0, 0, 'C')
+        assertFalse(PuzzleEngine.isWrongGuess(state, 0, 0, dict))
+
+        state = PuzzleEngine.withLetter(state, 0, 1, 'A')
+        // "CA" is not a dictionary word, but the line is still unfinished, so it is not wrong.
+        assertFalse(PuzzleEngine.isWrongGuess(state, 0, 1, dict))
+
+        state = PuzzleEngine.withLetter(state, 0, 2, 'T')
+        assertFalse(PuzzleEngine.isWrongGuess(state, 0, 2, dict))
+        assertTrue(PuzzleEngine.isSolved(state, dict))
+    }
+
+    @Test
+    fun `completed invalid run still costs a life`() {
+        // XYZ completes a 3-letter run and is not in the dictionary → wrong guess.
+        val level = LevelDefinition(
+            levelNumber = 104,
+            type = LevelType.PUZZLE_FILL,
+            puzzleGrid = listOf(
+                listOf(cell(CellStyle.BLANK), cell(CellStyle.BLANK), cell(CellStyle.BLANK))
+            )
+        )
+        var state = PuzzleEngine.fromDefinition(level)
+        state = PuzzleEngine.withLetter(state, 0, 0, 'X')
+        state = PuzzleEngine.withLetter(state, 0, 1, 'Y')
+        state = PuzzleEngine.withLetter(state, 0, 2, 'Z')
+        assertTrue(PuzzleEngine.isWrongGuess(state, 0, 2, dict))
+    }
+
+    @Test
     fun `wrong guess detection when completed line invalid`() {
         val level = LevelDefinition(
             levelNumber = 101,

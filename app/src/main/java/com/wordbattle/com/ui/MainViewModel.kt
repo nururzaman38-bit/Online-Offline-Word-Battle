@@ -44,6 +44,10 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.parseToJsonElement
 import java.time.Instant
 import java.util.UUID
 
@@ -173,6 +177,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             loadFriends()
             loadRequests()
             loadMessages()
+            // Presence (online badges) also needs its realtime channel rebuilt.
+            startPresence()
         }
         _uiState.update { it.copy(isReconnecting = false) }
         showToast(UiText.Res(R.string.toast_back_online), ToastKind.SUCCESS)
@@ -312,10 +318,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleOnlineSlot(slotIndex: Int) {
         if (slotIndex == 0) return
         _uiState.update { state ->
-            val changed = state.onlineSlots.toMutableSet().apply {
-                if (!add(slotIndex)) remove(slotIndex)
+            val count = state.assignmentPlayerCount
+            val wasOnline = slotIndex in state.onlineSlots
+            // The room model only supports online seats as a contiguous tail (slot_index >=
+            // local_slots), so the selection is always kept as a tail ending at the last seat.
+            // Tapping "Online" on seat i extends the block to i..last; tapping "Local" on the
+            // first online seat shrinks it. This way the seats shown as online in the UI are
+            // exactly the seats that become online in the room.
+            val online = when {
+                !wasOnline -> (slotIndex until count).toSet()
+                else -> {
+                    val boundary = state.onlineSlots.minOrNull() ?: slotIndex
+                    if (slotIndex == boundary) {
+                        ((boundary + 1) until count).toSet()
+                    } else {
+                        state.onlineSlots.filter { it < slotIndex }.toSet()
+                    }
+                }
             }
-            state.copy(onlineSlots = changed)
+            state.copy(onlineSlots = online)
         }
     }
 
@@ -400,7 +421,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val profile = uiState.value.profile
         val unlocked = profile?.campaignLevel ?: 1
         if (level.levelNumber > unlocked) {
-            showToast(UiText.Res(R.string.error_unknown), ToastKind.WARNING)
+            showToast(UiText.Res(R.string.error_level_locked), ToastKind.WARNING)
             return
         }
         // Lives check for puzzle
@@ -457,6 +478,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun buyLife() {
         val profile = uiState.value.profile ?: return
+        // Fail fast with a clear message instead of a generic "something went wrong".
+        val check = CampaignRules.purchaseLife(profile.livesCurrent, profile.livesMax, profile.coins)
+        if (!check.success) {
+            showToast(UiText.Res(R.string.toast_not_enough_coins), ToastKind.WARNING)
+            return
+        }
         viewModelScope.launch {
             try {
                 val updated = users.purchaseLife(profile.uid, profile.livesCurrent, profile.livesMax, profile.coins)
@@ -537,6 +564,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Check solved
         if (PuzzleEngine.isSolved(newPuzzle, dictionary)) {
             stopPuzzleTimer()
+            sound.stopTheme()
+            sound.play(GameSound.VICTORY)
             val elapsed = uiState.value.puzzleElapsedSeconds
             val level = uiState.value.selectedLevel ?: return
             val stars = CampaignRules.starsForPuzzle(level, elapsed)
@@ -575,11 +604,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
+                // Keep the best stars ever earned for this level (a worse replay must not
+                // overwrite the stored progress).
+                val savedStars = if (shouldSaveStars) stars else (existingProgress?.stars ?: stars)
                 // Save progress locally and remotely
-                campaignRepo.saveProgress(profile.uid, level.levelNumber, if (shouldSaveStars) stars else existingProgress?.stars ?: stars, elapsedSeconds, turnsUsed)
+                campaignRepo.saveProgress(profile.uid, level.levelNumber, savedStars, elapsedSeconds, turnsUsed)
                 val totalStars = if (shouldSaveStars) {
                     val currentTotal = profile.campaignStarsTotal
-                    val diff = stars - (existingProgress?.stars ?: 0)
+                    val diff = savedStars - (existingProgress?.stars ?: 0)
                     currentTotal + diff.coerceAtLeast(0)
                 } else profile.campaignStarsTotal
 
@@ -595,14 +627,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         profile = updatedProfile,
                         campaignProgress = it.campaignProgress.toMutableList().apply {
                             val idx = indexOfFirst { p -> p.levelNumber == level.levelNumber }
-                            if (idx >= 0) this[idx] = CampaignProgress(level.levelNumber, stars, elapsedSeconds, turnsUsed)
-                            else add(CampaignProgress(level.levelNumber, stars, elapsedSeconds, turnsUsed))
+                            if (idx >= 0) this[idx] = CampaignProgress(level.levelNumber, savedStars, elapsedSeconds, turnsUsed)
+                            else add(CampaignProgress(level.levelNumber, savedStars, elapsedSeconds, turnsUsed))
                         }
                     )
                 }
-                // Go to results
-                _uiState.update { it.copy(rootScreen = RootScreen.RESULTS) }
-                showToast(UiText.Raw("Level ${level.levelNumber} cleared! $stars★"), ToastKind.SUCCESS)
+                // Go to results (puzzles keep no GameState, so the summary travels in the state)
+                _uiState.update {
+                    it.copy(
+                        rootScreen = RootScreen.RESULTS,
+                        campaignResult = CampaignResult(
+                            levelNumber = level.levelNumber,
+                            stars = savedStars,
+                            elapsedSeconds = elapsedSeconds,
+                            turnsUsed = turnsUsed,
+                            isPuzzle = level.type == LevelType.PUZZLE_FILL
+                        )
+                    )
+                }
+                showToast(UiText.of(R.string.toast_level_cleared, level.levelNumber, savedStars), ToastKind.SUCCESS)
             } catch (e: Exception) {
                 showToast(e.toUiText(R.string.toast_something_wrong), ToastKind.WARNING)
             }
@@ -694,6 +737,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // Campaign level completion handling for SCORE_ATTACK
             if (placement.gameState.status == GameStatus.FINISHED && placement.gameState.mode == GameMode.CAMPAIGN_SCORE) {
+                playEndOfGameSound(placement.gameState)
                 val level = state.selectedLevel
                 if (level != null) {
                     val turns = placement.gameState.playerTurnsUsed
@@ -703,6 +747,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             if (placement.gameState.status == GameStatus.LEVEL_FAILED) {
+                playEndOfGameSound(placement.gameState)
                 _uiState.update { it.copy(rootScreen = RootScreen.RESULTS) }
                 showToast(UiText.Res(R.string.toast_move_rejected), ToastKind.WARNING)
                 return
@@ -715,11 +760,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun skipCurrentTurn() {
         val state = uiState.value
         val game = state.game ?: return
-        if (game.mode != GameMode.CAMPAIGN_SCORE && !RoomManager.canPlay(game, state.ownedPlayerIds)) return
-        games.skipTurn(game, game.currentTurnPlayerId).onSuccess {
-            _uiState.update { state -> state.copy(game = it, selectedLetter = null) }
+        // The computer plays its own turns; nobody can skip them for it.
+        val currentPlayer = game.players.firstOrNull { it.id == game.currentTurnPlayerId }
+        if (currentPlayer?.type == PlayerType.COMPUTER) return
+        val canSkip = game.mode == GameMode.CAMPAIGN_SCORE ||
+            RoomManager.canPlay(game, state.ownedPlayerIds) ||
+            // The host device advances a stalled remote turn so an online match cannot freeze.
+            (state.isHostDevice && game.mode == GameMode.MIXED_ONLINE)
+        if (!canSkip) return
+        games.skipTurn(game, game.currentTurnPlayerId).onSuccess { skipped ->
+            var next = skipped
+            // In campaign mode a skipped turn still consumes one of the player's allowed turns,
+            // so the turn limit stays meaningful.
+            if (game.mode == GameMode.CAMPAIGN_SCORE) {
+                val newTurns = game.playerTurnsUsed + 1
+                next = skipped.copy(playerTurnsUsed = newTurns)
+                val levelNumber = game.campaignLevelNumber
+                if (levelNumber != null) {
+                    val levelDef = CampaignLevelCatalog.generateLevelDefinition(levelNumber)
+                    // Only the human's score decides whether the target was reached.
+                    val humanScore = game.players.firstOrNull { it.type == PlayerType.HUMAN_LOCAL }?.score ?: 0
+                    val hasReached = humanScore >= skipped.targetScore
+                    if (CampaignRules.isScoreAttackFailed(levelDef, newTurns, hasReached)) {
+                        next = next.copy(status = GameStatus.LEVEL_FAILED)
+                    }
+                }
+            }
+            _uiState.update { state -> state.copy(game = next, selectedLetter = null) }
             showToast(UiText.Res(R.string.toast_turn_skipped), ToastKind.WARNING)
-            afterGameChanged(it)
+            afterGameChanged(next)
         }
     }
 
@@ -741,7 +810,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        if (game.status == GameStatus.FINISHED) {
+        if (game.status == GameStatus.FINISHED || game.status == GameStatus.LEVEL_FAILED) {
             _uiState.update { it.copy(rootScreen = RootScreen.RESULTS) }
             playEndOfGameSound(game)
             reportFinishedGame(game)
@@ -759,12 +828,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         enterLocalGame(game, setOf(game.players.first().id))
     }
 
-    private fun enterLocalGame(game: GameState, ownedIds: Set<String>, campaign: Boolean = false) {
+    private fun enterLocalGame(game: GameState, ownedIds: Set<String>) {
         stopRealtime()
         pauseSocialRealtime()
         _uiState.update {
             it.copy(
-                rootScreen = if (campaign || game.mode == GameMode.CAMPAIGN_SCORE) RootScreen.GAME else RootScreen.GAME,
+                rootScreen = RootScreen.GAME,
                 game = game,
                 ownedPlayerIds = ownedIds,
                 isHostDevice = true,
@@ -832,9 +901,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startTurnTimer(game: GameState) {
         turnTimerJob?.cancel()
-        // Use level's turnTimeSeconds if campaign, else default 45
+        // No countdown while the match is over.
+        if (game.status != GameStatus.IN_PROGRESS) {
+            _uiState.update { it.copy(turnSecondsRemaining = 0) }
+            return
+        }
+        // No countdown while the computer is thinking — only human turns are timed.
+        val currentPlayer = game.players.firstOrNull { it.id == game.currentTurnPlayerId }
+        if (currentPlayer?.type == PlayerType.COMPUTER) {
+            _uiState.update { it.copy(turnSecondsRemaining = 0) }
+            return
+        }
+        // Campaign levels may define `turnTimeSeconds = null` as "unlimited".
         val timeout = if (game.mode == GameMode.CAMPAIGN_SCORE) {
-            uiState.value.selectedLevel?.turnTimeSeconds ?: TURN_TIMEOUT_SECONDS
+            uiState.value.selectedLevel?.turnTimeSeconds ?: 0
         } else TURN_TIMEOUT_SECONDS
 
         if (timeout <= 0) {
@@ -850,11 +930,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (current.gameId != game.gameId || current.currentTurnPlayerId != game.currentTurnPlayerId) return@launch
                 _uiState.update { it.copy(turnSecondsRemaining = remaining) }
                 playTimerSound(remaining)
-                if (remaining == 0 && (RoomManager.canPlay(current, uiState.value.ownedPlayerIds) || current.mode == GameMode.CAMPAIGN_SCORE)) {
+                if (remaining == 0 && shouldAutoAdvanceTurn(current)) {
                     skipCurrentTurn()
                 }
             }
         }
+    }
+
+    /** Whether this device is allowed to auto-advance the current turn when its clock runs out. */
+    private fun shouldAutoAdvanceTurn(game: GameState): Boolean {
+        if (game.mode == GameMode.CAMPAIGN_SCORE) return true
+        if (RoomManager.canPlay(game, uiState.value.ownedPlayerIds)) return true
+        // The host device advances a stalled remote turn so the match cannot freeze.
+        return uiState.value.isHostDevice && game.mode == GameMode.MIXED_ONLINE
     }
 
     private fun playPlacementSound(placement: PlacementResult) {
@@ -879,7 +967,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!celebratedGameIds.add(game.gameId)) return
         sound.stopTheme()
         val owned = uiState.value.ownedPlayerIds
-        val didWin = game.players.any { it.rank == 1 && (it.id in owned || owned.isEmpty()) } || game.status == GameStatus.FINISHED
+        val didWin = game.players.any { it.rank == 1 && (it.id in owned || owned.isEmpty()) }
         sound.play(if (didWin) GameSound.VICTORY else GameSound.DEFEAT)
     }
 
@@ -972,8 +1060,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun inviteFriend(friend: FriendProfile) {
-        createQuickRoom()
-        showToast(UiText.of(R.string.toast_invite_hint, friend.profile.displayName))
+        val profile = uiState.value.profile ?: return
+        if (uiState.value.isOfflineGuest) {
+            showToast(UiText.Res(R.string.toast_sign_in_create), ToastKind.WARNING)
+            return
+        }
+        requireOnline {
+            launchBusy {
+                // 1 host + 1 online seat: the friend is the second player.
+                val room = rooms.createRoom(profile, localSlots = 1, onlineSlots = 1)
+                _uiState.update {
+                    it.copy(
+                        room = room,
+                        rootScreen = RootScreen.ROOM_SETUP,
+                        isHostDevice = true,
+                        ownedPlayerIds = setOf(profile.uid)
+                    )
+                }
+                observeRoom(room.roomId)
+                // Send a real GAME_INVITE carrying the room code + passcode so the friend can
+                // accept it from the Requests tab and jump straight into the lobby.
+                runCatching {
+                    requestRepo.sendGameInvite(profile.uid, friend.profile.uid, room.roomCode, room.passcode)
+                }.onSuccess {
+                    showToast(UiText.of(R.string.toast_invite_sent, friend.profile.displayName), ToastKind.SUCCESS)
+                }.onFailure {
+                    // The room still exists; the host can share the code manually.
+                    showToast(UiText.of(R.string.toast_invite_hint, friend.profile.displayName), ToastKind.WARNING)
+                }
+            }
+        }
     }
 
     // --- New: Requests & Messages ---
@@ -1086,19 +1202,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun acceptGameInvite(req: GameRequest) {
-        // payload contains roomCode/passcode
-        // For now just show toast and try to join if info present
-        val payload = req.payload?.get("json")?.toString()
-        // Payload is stored as jsonb; parsing would be needed – placeholder joins via code in payload
-        // We'll try to extract roomCode if payload contains it
-        viewModelScope.launch {
-            try {
-                requestRepo.updateStatus(req.id, RequestStatus.accepted)
-                showToast(UiText.of(R.string.toast_invite_hint, req.senderId), ToastKind.SUCCESS)
-                // If we had room code, we would join – for scaffold we just close
-                loadRequests()
-            } catch (e: Exception) {
-                showToast(e.toUiText(R.string.toast_something_wrong), ToastKind.WARNING)
+        val profile = uiState.value.profile ?: return
+        // The payload is stored as a jsonb object; the repository wraps it under "json".
+        val payloadJson = req.payload?.get("json") ?: run {
+            showToast(UiText.Res(R.string.error_room_not_found), ToastKind.WARNING)
+            return
+        }
+        val parsed = runCatching { container.json.parseToJsonElement(payloadJson).jsonObject }.getOrNull()
+        val roomCode = parsed?.get("roomCode")?.jsonPrimitive?.contentOrNull
+        val passcode = parsed?.get("passcode")?.jsonPrimitive?.contentOrNull
+        if (roomCode.isNullOrBlank() || passcode.isNullOrBlank()) {
+            showToast(UiText.Res(R.string.error_room_not_found), ToastKind.WARNING)
+            return
+        }
+        requireOnline {
+            launchBusy {
+                when (val result = rooms.joinRoom(roomCode, passcode, profile)) {
+                    is JoinRoomResult.Error -> showToast(result.code.asUiText(), ToastKind.WARNING)
+                    is JoinRoomResult.Success -> {
+                        _uiState.update {
+                            it.copy(
+                                room = result.room,
+                                rootScreen = RootScreen.LOBBY,
+                                isHostDevice = false,
+                                ownedPlayerIds = setOf(profile.uid)
+                            )
+                        }
+                        observeRoom(result.room.roomId)
+                        runCatching { requestRepo.updateStatus(req.id, RequestStatus.accepted) }
+                        loadRequests()
+                        showToast(UiText.Res(R.string.toast_room_joined), ToastKind.SUCCESS)
+                    }
+                }
             }
         }
     }
@@ -1149,15 +1284,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             startCampaignLevel(selectedLevel)
             return
         }
-        if (uiState.value.rootScreen == RootScreen.PUZZLE_GAME && selectedLevel != null) {
-            // Restart puzzle
+        // Puzzle replay — works from the results screen too (puzzles keep no GameState).
+        if (selectedLevel?.type == LevelType.PUZZLE_FILL) {
             val puzzle = PuzzleEngine.fromDefinition(selectedLevel)
             _uiState.update {
                 it.copy(
                     puzzleState = puzzle,
                     puzzleElapsedSeconds = 0,
                     puzzleIsRunning = false,
-                    puzzleWrongCells = emptySet()
+                    puzzleWrongCells = emptySet(),
+                    rootScreen = RootScreen.PUZZLE_GAME,
+                    campaignResult = null
                 )
             }
             return
@@ -1196,7 +1333,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else Unit
             RootScreen.ROOM_SETUP, RootScreen.LOBBY -> {
                 stopRealtime()
+                val room = uiState.value.room
+                val uid = uiState.value.profile?.uid
+                val isHost = uiState.value.isHostDevice
                 _uiState.update { it.copy(rootScreen = RootScreen.MAIN, room = null, isReconnecting = false) }
+                // Never leave a ghost lobby behind: the host removes the room, a joiner frees
+                // their seat so the host can still start with someone else.
+                if (room != null && uid != null && !uiState.value.isOfflineGuest) {
+                    viewModelScope.launch { runCatching { rooms.leaveLobby(room.roomId, uid, isHost) } }
+                }
             }
             RootScreen.GAME -> {
                 // If campaign, go back to level select
@@ -1222,6 +1367,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun goHome() {
+        // If the host abandons an in-progress online match, close the room so the other devices
+        // are not stuck in a game that can never advance.
+        val leaving = uiState.value
+        if (leaving.game?.mode == GameMode.MIXED_ONLINE && leaving.isHostDevice &&
+            leaving.game?.status == GameStatus.IN_PROGRESS
+        ) {
+            val room = leaving.room
+            val hostUid = leaving.profile?.uid
+            if (room != null && hostUid != null) {
+                viewModelScope.launch { runCatching { rooms.finishRoom(room.roomId, hostUid) } }
+            }
+        }
         stopRealtime()
         stopPuzzleTimer()
         stopMessageObservation()
@@ -1234,7 +1391,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 puzzleState = null,
                 room = null,
                 selectedLetter = null,
-                isReconnecting = false
+                isReconnecting = false,
+                campaignResult = null
             )
         }
         refreshHomeData()
@@ -1282,7 +1440,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startPresence() {
         val uid = uiState.value.profile?.uid ?: return
-        if (presenceJob?.isActive == true) return
+        // Always rebuild the presence channel (e.g. after a reconnect) instead of silently
+        // keeping a stale subscription whose online badges never refresh.
+        presenceJob?.cancel()
         presenceJob = viewModelScope.launch {
             users.observeOnlineUsers(uid)
                 .catch { }

@@ -150,7 +150,14 @@ class GameRepository(
         }
         var rankings = game.rankingsAssigned
         val scorer = players.first { it.id == playerId }
-        if (scorer.score >= game.targetScore && scorer.rank == null) {
+        // In campaign score-attack only the HUMAN's score may end the level: the computer is a
+        // word-blocking sparring partner, so it reaching the target must neither finish the
+        // match nor hand the human a win.
+        val campaignHumanId = if (game.mode == GameMode.CAMPAIGN_SCORE) {
+            players.firstOrNull { it.type == PlayerType.HUMAN_LOCAL }?.id
+        } else null
+        val countsTowardsFinish = campaignHumanId == null || playerId == campaignHumanId
+        if (countsTowardsFinish && scorer.score >= game.targetScore && scorer.rank == null) {
             val rank = rankings.size + 1
             players = players.map { if (it.id == playerId) it.copy(rank = rank) else it }
             rankings = rankings + playerId
@@ -158,7 +165,7 @@ class GameRepository(
 
         val unranked = players.filter { it.rank == null }
         var status = game.status
-        if (players.size > 1 && unranked.size == 1) {
+        if (countsTowardsFinish && players.size > 1 && unranked.size == 1) {
             val last = unranked.single()
             players = players.map { if (it.id == last.id) it.copy(rank = players.size) else it }
             rankings = rankings + last.id
@@ -177,10 +184,11 @@ class GameRepository(
             val levelNumber = game.campaignLevelNumber
             if (levelNumber != null) {
                 val levelDef = com.wordbattle.com.data.game.CampaignLevelCatalog.generateLevelDefinition(levelNumber)
-                val hasReachedTarget = scorer.score >= game.targetScore
-                if (com.wordbattle.com.data.game.CampaignRules.isScoreAttackFailed(levelDef, newTurnsUsed, hasReachedTarget)) {
+                val human = players.firstOrNull { it.type == PlayerType.HUMAN_LOCAL }
+                val humanReachedTarget = human != null && human.score >= game.targetScore
+                if (com.wordbattle.com.data.game.CampaignRules.isScoreAttackFailed(levelDef, newTurnsUsed, humanReachedTarget)) {
                     status = GameStatus.LEVEL_FAILED
-                } else if (hasReachedTarget) {
+                } else if (humanReachedTarget) {
                     status = GameStatus.FINISHED
                     starsEarned = com.wordbattle.com.data.game.CampaignRules.starsForScoreAttack(levelDef, newTurnsUsed)
                 }

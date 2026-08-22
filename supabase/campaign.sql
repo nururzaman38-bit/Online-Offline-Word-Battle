@@ -121,19 +121,20 @@ set search_path = public
 as $$
 begin
   if new.type = 'LIFE' and old.status = 'pending' and new.status = 'accepted' then
-    -- Receiver gets +1 life up to max
+    -- The SENDER asked for the life ("Ask a friend for life"), so the sender gets the +1 life
+    -- (and a fresh regen anchor) and the friend who accepted gets +10 coins for helping out.
     update public.profiles
     set lives_current = least(lives_max, lives_current + 1),
         last_life_regen_at = case
           when lives_current + 1 >= lives_max then now()
           else coalesce(last_life_regen_at, now())
         end
-    where id = new.receiver_id;
+    where id = new.sender_id;
 
-    -- Sender gets +10 coins atomically – prevents self-minting via client write
+    -- Receiver gets +10 coins atomically – prevents self-minting via client write
     update public.profiles
     set coins = coins + 10
-    where id = new.sender_id;
+    where id = new.receiver_id;
   end if;
   return new;
 end;

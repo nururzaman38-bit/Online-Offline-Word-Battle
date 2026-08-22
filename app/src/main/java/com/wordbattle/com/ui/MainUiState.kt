@@ -19,6 +19,15 @@ enum class MainTab { HOME, RANK, FRIENDS, PROFILE, SETTINGS }
 enum class FriendsTab { FRIENDS, MESSAGE, REQUEST }
 enum class ToastKind { DEFAULT, WARNING, SUCCESS }
 
+/** Summary of the campaign level that was just completed. */
+data class CampaignResult(
+    val levelNumber: Int,
+    val stars: Int,
+    val elapsedSeconds: Int?,
+    val turnsUsed: Int?,
+    val isPuzzle: Boolean
+)
+
 /**
  * A transient message.
  *
@@ -72,7 +81,9 @@ data class MainUiState(
     val selectedThreadFriend: UserProfile? = null,
     val showLifeBottomSheet: Boolean = false,
     val lifeRegenCountdownMinutes: Long = 0,
-    val puzzleWrongCells: Set<Pair<Int, Int>> = emptySet()
+    val puzzleWrongCells: Set<Pair<Int, Int>> = emptySet(),
+    /** Last completed campaign level — lets the results screen render without a GameState. */
+    val campaignResult: CampaignResult? = null
 ) {
     /** Online play needs both a signed-in account and a working connection. */
     val canPlayOnline: Boolean get() = !isOfflineGuest && profile != null && isOnline

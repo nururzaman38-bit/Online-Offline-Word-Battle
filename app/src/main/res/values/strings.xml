@@ -275,4 +275,13 @@
     <string name="error_not_your_turn">Wait for your turn.</string>
     <string name="error_turn_already_advanced">The turn has already advanced.</string>
     <string name="error_unknown">Something went wrong. Please try again.</string>
+    <string name="error_level_locked">This level is locked. Clear the previous level first.</string>
+    <string name="toast_invite_sent">Invite sent to %1$s</string>
+    <string name="toast_room_joined">Joined the room</string>
+    <string name="toast_not_enough_coins">Not enough coins.</string>
+    <string name="toast_level_cleared">Level %1$d cleared! %2$d★</string>
+    <string name="results_level_cleared">Level %1$d cleared!</string>
+    <string name="results_stars">%1$d / 3 stars</string>
+    <string name="results_time">Time: %1$s</string>
+    <string name="results_turns">Turns: %1$d</string>
 </resources>

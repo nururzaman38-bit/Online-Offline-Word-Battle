@@ -167,6 +167,13 @@ create policy "Host can delete room slots" on public.room_slots
   for delete to authenticated
   using (public.is_room_host(room_id));
 
+-- A joiner can release their own seat when leaving the lobby, so the host is never stuck
+-- waiting for a Ready that will never come.
+drop policy if exists "Player can release own slot" on public.room_slots;
+create policy "Player can release own slot" on public.room_slots
+  for delete to authenticated
+  using (filled_by = auth.uid());
+
 -- ---------------------------------------------------------------------------
 -- 4. games — created by the host, updated by the players of that room only.
 -- ---------------------------------------------------------------------------

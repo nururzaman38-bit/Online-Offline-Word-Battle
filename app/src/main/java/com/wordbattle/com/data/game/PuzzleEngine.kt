@@ -129,55 +129,52 @@ object PuzzleEngine {
     }
 
     /**
-     * After filling a BLANK at (row,col), check if that placement creates a completed line that is invalid.
-     * Returns true if wrong guess (should cost 1 life).
+     * After filling a BLANK at (row,col), check if that placement completes a line that is
+     * invalid. A guess only costs a life when it *completes* a run (every cell of the segment
+     * between blockers is now filled) and the finished word is not in the dictionary.
+     *
+     * Placing letters on an unfinished line is never wrong: in `C _ _` the player must be free to
+     * try `A` (making the partial `CA`) without losing a life before completing `CAT`.
+     *
+     * @return true when a completed run through (row,col) is not a valid dictionary word.
      */
     fun isWrongGuess(state: PuzzleState, row: Int, col: Int, dictionary: WordDictionary): Boolean {
-        // Find horizontal run containing (row,col)
-        val hRun = extractRunContaining(state, row, col, horizontal = true)
-        val vRun = extractRunContaining(state, row, col, horizontal = false)
-
-        // If a run is fully filled (no null) and length>=2 and invalid => wrong
-        listOfNotNull(hRun, vRun).forEach { word ->
+        if (!state.isBlank(row, col)) return false
+        listOf(true, false).forEach { horizontal ->
+            val segment = segmentCells(state, row, col, horizontal) ?: return@forEach
+            // The line is not finished until every cell in the segment is filled.
+            if (segment.any { (r, c) -> state.charAt(r, c) == null }) return@forEach
+            val word = segment.map { (r, c) -> state.charAt(r, c)!! }.joinToString("")
             if (word.length >= WordEngine.MIN_WORD_LENGTH && !dictionary.isValidWord(word)) {
-                // Only count as wrong if the run is completely filled (no empty BLANK inside)
-                // hRun/vRun extracted only if contiguous and all letters present – so if we got a word, it's complete
                 return true
             }
         }
         return false
     }
 
-    private fun extractRunContaining(state: PuzzleState, row: Int, col: Int, horizontal: Boolean): String? {
+    /**
+     * The full segment of cells between blocked cells (or the board edge) that contains
+     * (row,col), for the given axis. Returns null when (row,col) is itself blocked.
+     */
+    private fun segmentCells(state: PuzzleState, row: Int, col: Int, horizontal: Boolean): List<Pair<Int, Int>>? {
         if (state.isBlocked(row, col)) return null
-        if (state.charAt(row, col) == null) return null
-
-        val (dr, dc) = if (horizontal) 0 to 1 else 1 to 0
-
-        // Expand backward
-        var r = row
-        var c = col
+        var startR = row
+        var startC = col
         while (true) {
-            val nr = r - dr
-            val nc = c - dc
-            if (nr !in 0 until state.rows || nc !in 0 until state.cols) break
-            if (state.isBlocked(nr, nc) || state.charAt(nr, nc) == null) break
-            r = nr
-            c = nc
+            val nr = startR - (if (horizontal) 0 else 1)
+            val nc = startC - (if (horizontal) 1 else 0)
+            if (nr !in 0 until state.rows || nc !in 0 until state.cols || state.isBlocked(nr, nc)) break
+            startR = nr
+            startC = nc
         }
-        // Expand forward collecting
-        val sb = StringBuilder()
-        var cr = r
-        var cc = c
-        while (cr in 0 until state.rows && cc in 0 until state.cols) {
-            if (state.isBlocked(cr, cc) || state.charAt(cr, cc) == null) break
-            sb.append(state.charAt(cr, cc))
-            // Stop when we have passed the original cell and next cell is blocked/empty – but we want full contiguous run
-            cr += dr
-            cc += dc
+        val cells = mutableListOf<Pair<Int, Int>>()
+        var cr = startR
+        var cc = startC
+        while (cr in 0 until state.rows && cc in 0 until state.cols && !state.isBlocked(cr, cc)) {
+            cells += cr to cc
+            cr += if (horizontal) 0 else 1
+            cc += if (horizontal) 1 else 0
         }
-        return if (sb.isNotEmpty()) sb.toString().uppercase(Locale.ROOT) else null
+        return cells
     }
-
-    private fun <T> listOfNotNull(vararg elements: T?): List<T> = elements.filterNotNull()
 }

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wordbattle.com.R
 import com.wordbattle.com.data.model.Cell
+import com.wordbattle.com.data.model.GameMode
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.components.LetterTile
@@ -58,7 +59,8 @@ fun GameScreen(
     onSelectLetter: (Char) -> Unit,
     onCell: (Int, Int) -> Unit,
     onSkip: () -> Unit,
-    onExit: () -> Unit
+    onExit: () -> Unit,
+    hostCanSkip: Boolean = false
 ) {
     GradientBackground {
         if (game == null) {
@@ -67,6 +69,8 @@ fun GameScreen(
         }
         val current = game.players.firstOrNull { it.id == game.currentTurnPlayerId }
         val canPlay = game.currentTurnPlayerId in ownedPlayerIds
+        // The host device may advance a stalled remote turn so the match cannot freeze.
+        val canSkipTurn = canPlay || (hostCanSkip && game.mode == GameMode.MIXED_ONLINE)
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onExit) { Icon(Icons.Default.Close, stringResource(R.string.action_leave_game), tint = Color.White) }
@@ -79,11 +83,16 @@ fun GameScreen(
                         color = if (canPlay) Gold else Color.White.copy(alpha = .72f)
                     )
                 }
-                Surface(shape = CircleShape, color = if (turnSeconds <= 10) Color(0xFFFF4E4E) else PurpleDark.copy(alpha = .7f)) {
+                Surface(shape = CircleShape, color = if (turnSeconds in 1..10) Color(0xFFFF4E4E) else PurpleDark.copy(alpha = .7f)) {
                     Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Timer, null, tint = Color.White, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.size(5.dp))
-                        Text(stringResource(R.string.game_timer_seconds, turnSeconds), color = Color.White, style = MaterialTheme.typography.labelLarge)
+                        // 0 = no countdown (unlimited campaign level or computer thinking).
+                        Text(
+                            if (turnSeconds <= 0) "∞" else stringResource(R.string.game_timer_seconds, turnSeconds),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
             }
@@ -130,8 +139,8 @@ fun GameScreen(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = onSkip, enabled = canPlay) {
-                        Text(stringResource(R.string.action_skip), color = if (canPlay) Color.White else Muted)
+                    TextButton(onClick = onSkip, enabled = canSkipTurn) {
+                        Text(stringResource(R.string.action_skip), color = if (canSkipTurn) Color.White else Muted)
                     }
                 }
                 if (!canPlay) {

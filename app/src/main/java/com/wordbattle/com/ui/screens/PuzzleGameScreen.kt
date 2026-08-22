@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wordbattle.com.data.game.PuzzleEngine
 import com.wordbattle.com.data.model.CellStyle
+import com.wordbattle.com.data.model.FriendProfile
 import com.wordbattle.com.data.model.LevelDefinition
 import com.wordbattle.com.ui.theme.*
 
@@ -180,11 +181,11 @@ fun LivesBottomSheet(
     livesMax: Int,
     regenMinutes: Long,
     coins: Int,
+    friends: List<FriendProfile>,
     onBuyLife: () -> Unit,
-    onRequestLife: () -> Unit,
+    onRequestLife: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Simple bottom sheet placeholder
     Surface(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         color = Color.White,
@@ -198,11 +199,27 @@ fun LivesBottomSheet(
             Button(onClick = onBuyLife, enabled = coins >= 30, modifier = Modifier.fillMaxWidth()) {
                 Text("Buy +1 life for 30 coins (You have $coins)")
             }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onRequestLife, modifier = Modifier.fillMaxWidth()) {
-                Text("Ask a friend for life")
+            Spacer(Modifier.height(12.dp))
+            Text("Ask a friend for life", style = MaterialTheme.typography.titleSmall, color = Ink)
+            Spacer(Modifier.height(6.dp))
+            if (friends.isEmpty()) {
+                Text(
+                    "No friends yet — add friends to ask for lives.",
+                    color = Muted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                friends.take(5).forEach { friend ->
+                    OutlinedButton(
+                        onClick = { onRequestLife(friend.profile.uid) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(friend.profile.displayName)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Close")
             }

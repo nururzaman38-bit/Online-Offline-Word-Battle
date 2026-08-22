@@ -133,9 +133,10 @@ begin
   end if;
 
   if tg_op = 'INSERT' then
-    if new.display_name_updated_at is null then
-      new.display_name_updated_at := now();
-    end if;
+    -- A brand-new profile has no display-name change history yet: the 10-day cooldown must
+    -- start on the FIRST real display-name edit, not on account creation (otherwise a new
+    -- user cannot pick their own name on the first-login identity screen).
+    new.display_name_updated_at := null;
     return new;
   end if;
 
@@ -161,6 +162,15 @@ end;
 $$;
 
 drop trigger if exists profiles_identity_rules on public.profiles;
+
+-- Undo the old "cooldown starts at signup" behaviour for rows that never actually changed
+-- their display name (the timestamp still equals the row's creation time). This runs WITHOUT
+-- the trigger so the null is not overwritten back.
+update public.profiles
+set display_name_updated_at = null
+where display_name_updated_at is not null
+  and display_name_updated_at = created_at;
+
 create trigger profiles_identity_rules
   before insert or update on public.profiles
   for each row execute function public.enforce_profile_identity_rules();
@@ -276,6 +286,11 @@ create policy "Player can update own slot" on public.room_slots for update to au
 drop policy if exists "Host can delete room slots" on public.room_slots;
 create policy "Host can delete room slots" on public.room_slots for delete to authenticated
   using (public.is_room_host(room_id));
+-- A joiner can release their own seat when leaving the lobby, so the host is never stuck
+-- waiting for a Ready that will never come.
+drop policy if exists "Player can release own slot" on public.room_slots;
+create policy "Player can release own slot" on public.room_slots for delete to authenticated
+  using (filled_by = auth.uid());
 
 -- games: created by the host, updated only by the people sitting in that room.
 drop policy if exists "Anyone involved can read games" on public.games;
@@ -387,8 +402,10 @@ create or replace function public.handle_life_request_accepted()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if new.type = 'LIFE' and old.status = 'pending' and new.status = 'accepted' then
-    update public.profiles set lives_current = least(lives_max, lives_current + 1) where id = new.receiver_id;
-    update public.profiles set coins = coins + 10 where id = new.sender_id;
+    -- The SENDER asked for the life, so the sender gets the +1 life and the accepting friend
+    -- gets +10 coins for helping out.
+    update public.profiles set lives_current = least(lives_max, lives_current + 1) where id = new.sender_id;
+    update public.profiles set coins = coins + 10 where id = new.receiver_id;
   end if;
   return new;
 end;

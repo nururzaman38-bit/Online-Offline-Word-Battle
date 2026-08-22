@@ -121,13 +121,17 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
                         viewModel::selectLetter,
                         viewModel::placeSelectedLetter,
                         viewModel::skipCurrentTurn,
-                        viewModel::goHome
+                        viewModel::goHome,
+                        hostCanSkip = state.isHostDevice
                     )
                     RootScreen.RESULTS -> ResultsScreen(
                         game = state.game,
-                        didWin = state.didWinCurrentGame,
+                        // A completed campaign level (score attack or puzzle) is always a win;
+                        // puzzles keep no GameState so the flag comes from campaignResult.
+                        didWin = state.didWinCurrentGame || state.campaignResult != null,
                         onPlayAgain = viewModel::playAgain,
-                        onHome = viewModel::goHome
+                        onHome = viewModel::goHome,
+                        campaignResult = state.campaignResult
                     )
                     RootScreen.LEVEL_SELECT -> LevelSelectScreen(
                         levels = state.campaignLevels,
@@ -184,12 +188,9 @@ fun WordBattleNavGraph(state: MainUiState, viewModel: MainViewModel, context: Co
                     livesMax = state.profile?.livesMax ?: 3,
                     regenMinutes = state.lifeRegenCountdownMinutes,
                     coins = state.profile?.coins ?: 0,
+                    friends = state.friends,
                     onBuyLife = viewModel::buyLife,
-                    onRequestLife = {
-                        // Request life from first friend as example, or open friends tab
-                        val firstFriend = state.friends.firstOrNull()?.profile?.uid
-                        if (firstFriend != null) viewModel.requestLifeFromFriend(firstFriend) else viewModel.dismissLifeBottomSheet()
-                    },
+                    onRequestLife = { friendId -> viewModel.requestLifeFromFriend(friendId) },
                     onDismiss = viewModel::dismissLifeBottomSheet
                 )
             }

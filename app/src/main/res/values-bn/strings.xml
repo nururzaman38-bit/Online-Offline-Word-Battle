@@ -275,4 +275,13 @@
     <string name="error_not_your_turn">আপনার পালার জন্য অপেক্ষা করুন।</string>
     <string name="error_turn_already_advanced">চাল ইতিমধ্যেই পরের জনে গেছে।</string>
     <string name="error_unknown">কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।</string>
+    <string name="error_level_locked">এই লেভেলটি লক করা আছে। আগের লেভেলটি শেষ করুন।</string>
+    <string name="toast_invite_sent">%1$s-কে আমন্ত্রণ পাঠানো হয়েছে</string>
+    <string name="toast_room_joined">রুমে যোগ দেওয়া হয়েছে</string>
+    <string name="toast_not_enough_coins">পর্যাপ্ত কয়েন নেই।</string>
+    <string name="toast_level_cleared">লেভেল %1$d শেষ! %2$d★</string>
+    <string name="results_level_cleared">লেভেল %1$d শেষ!</string>
+    <string name="results_stars">%1$d / ৩ তারা</string>
+    <string name="results_time">সময়: %1$s</string>
+    <string name="results_turns">চাল: %1$d</string>
 </resources>

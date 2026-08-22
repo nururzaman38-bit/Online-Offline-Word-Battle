@@ -86,9 +86,10 @@ begin
   end if;
 
   if tg_op = 'INSERT' then
-    if new.display_name_updated_at is null then
-      new.display_name_updated_at := now();
-    end if;
+    -- A brand-new profile has no display-name change history yet: the 10-day cooldown must
+    -- start on the FIRST real display-name edit, not on account creation (otherwise a new
+    -- user cannot pick their own name on the first-login identity screen).
+    new.display_name_updated_at := null;
     return new;
   end if;
 
@@ -115,6 +116,16 @@ end;
 $$;
 
 drop trigger if exists profiles_identity_rules on public.profiles;
+
+-- Undo the old "cooldown starts at signup" behaviour for rows that were created before this
+-- fix and never actually changed their display name (the timestamp still equals the row's
+-- creation time). This runs WITHOUT the trigger so the null is not overwritten back.
+-- Such users can now pick/change their name without waiting out 10 days.
+update public.profiles
+set display_name_updated_at = null
+where display_name_updated_at is not null
+  and display_name_updated_at = created_at;
+
 create trigger profiles_identity_rules
   before insert or update on public.profiles
   for each row execute function public.enforce_profile_identity_rules();

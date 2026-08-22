@@ -43,6 +43,13 @@ Run the SQL files manually in the Supabase SQL Editor.
 
 Both fix scripts are idempotent and can be re-run safely.
 
+> **Re-run these scripts to pick up two behavior fixes:** `update_username_cooldown.sql` now
+> starts the 10-day display-name cooldown on the **first real name edit** (not at signup), so a
+> brand-new account can pick its name on the first-login screen, and it resets the cooldown
+> timestamp for existing rows that never edited their name. `campaign.sql`/`schema.sql` now give
+> the **+1 life to the requester** of a LIFE request and the +10 coin reward to the friend who
+> accepted it (previously swapped).
+
 Key points these policies guarantee:
 
 - room slots are inserted **without** an `id`, so `gen_random_uuid()` generates it;

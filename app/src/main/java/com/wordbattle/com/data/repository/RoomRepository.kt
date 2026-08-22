@@ -151,6 +151,22 @@ class RoomRepository(
         runCatching { cache.delete(roomId) }
     }
 
+    /**
+     * Cleans up a lobby the caller is leaving so it never turns into a ghost room: the host
+     * removes the whole room (slots cascade), a joiner releases only their own seat so the host
+     * is not stuck waiting for a Ready that never comes.
+     */
+    suspend fun leaveLobby(roomId: String, uid: String, isHost: Boolean) {
+        if (isHost) {
+            deleteIncompleteRoom(roomId)
+        } else {
+            runCatching {
+                client.from("room_slots").delete { filter { eq("room_id", roomId); eq("filled_by", uid) } }
+            }
+            runCatching { cache.delete(roomId) }
+        }
+    }
+
     private fun requireAuthenticatedUid(): String = client.auth.currentUserOrNull()?.id
         ?: throw AppException(AppErrorCode.NOT_SIGNED_IN, "No Supabase session; sign in again")
 

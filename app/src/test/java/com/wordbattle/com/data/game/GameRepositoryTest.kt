@@ -112,4 +112,47 @@ class GameRepositoryTest {
         val moved = repository.placeLetter(game, "p1", 1, 1, 'A').getOrThrow().gameState
         assertTrue(repository.placeLetter(moved.copy(currentTurnPlayerId = "p1"), "p1", 1, 1, 'B').isFailure)
     }
+
+    @Test
+    fun `computer reaching the campaign target does not finish the level`() {
+        var board = BoardState.empty(5, 5)
+        board = requireNotNull(WordEngine.place(board, 2, 0, 'M', "campaign-ai"))
+        board = requireNotNull(WordEngine.place(board, 2, 1, 'A', "campaign-ai"))
+        val campaignPlayers = listOf(
+            Player("campaign-human", "You", PlayerType.HUMAN_LOCAL, score = 0, turnOrder = 0),
+            Player("campaign-ai", "Word Bot", PlayerType.COMPUTER, score = 4, turnOrder = 1)
+        )
+        val game = GameState(
+            "cg1", GameMode.CAMPAIGN_SCORE, targetScore = 5, board = board,
+            players = campaignPlayers, currentTurnPlayerId = "campaign-ai", campaignLevelNumber = 1
+        )
+
+        // The AI places T completing "MAT": its score crosses the target.
+        val result = repository.placeLetter(game, "campaign-ai", 2, 2, 'T').getOrThrow().gameState
+        assertEquals(GameStatus.IN_PROGRESS, result.status)
+        assertEquals(null, result.players.first { it.id == "campaign-human" }.rank)
+        assertEquals("campaign-human", result.currentTurnPlayerId)
+    }
+
+    @Test
+    fun `human reaching the campaign target finishes the level with stars`() {
+        var board = BoardState.empty(5, 5)
+        board = requireNotNull(WordEngine.place(board, 2, 0, 'M', "campaign-human"))
+        board = requireNotNull(WordEngine.place(board, 2, 1, 'A', "campaign-human"))
+        val campaignPlayers = listOf(
+            Player("campaign-human", "You", PlayerType.HUMAN_LOCAL, score = 4, turnOrder = 0),
+            Player("campaign-ai", "Word Bot", PlayerType.COMPUTER, score = 0, turnOrder = 1)
+        )
+        val game = GameState(
+            "cg2", GameMode.CAMPAIGN_SCORE, targetScore = 5, board = board,
+            players = campaignPlayers, currentTurnPlayerId = "campaign-human",
+            campaignLevelNumber = 1, playerTurnsUsed = 1
+        )
+
+        val result = repository.placeLetter(game, "campaign-human", 2, 2, 'T').getOrThrow().gameState
+        assertEquals(GameStatus.FINISHED, result.status)
+        assertEquals(1, result.players.first { it.id == "campaign-human" }.rank)
+        assertEquals(2, result.playerTurnsUsed)
+        assertTrue(result.starsEarned in 1..3)
+    }
 }

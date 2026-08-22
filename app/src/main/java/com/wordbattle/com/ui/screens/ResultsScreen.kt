@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.wordbattle.com.R
 import com.wordbattle.com.data.model.GameState
 import com.wordbattle.com.data.model.Player
+import com.wordbattle.com.ui.CampaignResult
 import com.wordbattle.com.ui.components.GoldButton
 import com.wordbattle.com.ui.components.GradientBackground
 import com.wordbattle.com.ui.components.VictoryTrophy
@@ -60,7 +61,8 @@ fun ResultsScreen(
     game: GameState?,
     didWin: Boolean,
     onPlayAgain: () -> Unit,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    campaignResult: CampaignResult? = null
 ) {
     val players = game?.players?.sortedWith(compareBy({ it.rank ?: Int.MAX_VALUE }, { -it.score })).orEmpty()
 
@@ -82,12 +84,18 @@ fun ResultsScreen(
                     color = Color.White.copy(alpha = .75f)
                 )
                 Spacer(Modifier.size(18.dp))
-                WhiteCard(Modifier.fillMaxWidth()) {
-                    players.forEachIndexed { index, player ->
-                        StandingRow(player = player, index = index)
+                if (game == null && campaignResult != null) {
+                    // Puzzles keep no GameState, so the level summary travels in the UI state.
+                    CampaignSummaryCard(campaignResult)
+                    Spacer(Modifier.size(20.dp))
+                } else {
+                    WhiteCard(Modifier.fillMaxWidth()) {
+                        players.forEachIndexed { index, player ->
+                            StandingRow(player = player, index = index)
+                        }
                     }
+                    Spacer(Modifier.size(20.dp))
                 }
-                Spacer(Modifier.size(20.dp))
                 GoldButton(stringResource(R.string.results_play_again), onPlayAgain)
                 Spacer(Modifier.size(12.dp))
                 Button(
@@ -108,6 +116,35 @@ fun ResultsScreen(
         // Confetti sits on top but never steals a tap: it is drawn in a non-clickable Canvas.
         WinCelebration(visible = didWin)
     }
+}
+
+/** Compact summary for puzzle levels: level number, stars and time taken. */
+@Composable
+private fun CampaignSummaryCard(result: CampaignResult) {
+    WhiteCard(Modifier.fillMaxWidth()) {
+        Text(
+            stringResource(R.string.results_level_cleared, result.levelNumber),
+            color = Ink,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(stringResource(R.string.results_stars, result.stars), color = Gold, style = MaterialTheme.typography.titleMedium)
+        result.elapsedSeconds?.let { seconds ->
+            Spacer(Modifier.size(4.dp))
+            Text(stringResource(R.string.results_time, formatClock(seconds)), color = Muted)
+        }
+        result.turnsUsed?.let { turns ->
+            Spacer(Modifier.size(4.dp))
+            Text(stringResource(R.string.results_turns, turns), color = Muted)
+        }
+    }
+}
+
+private fun formatClock(totalSeconds: Int): String {
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 /** One line of the final standings, sliding in with a small stagger for a livelier reveal. */
